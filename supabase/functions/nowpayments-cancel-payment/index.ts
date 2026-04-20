@@ -127,13 +127,13 @@ Deno.serve(async (req) => {
         return jsonResponse(
           req,
           {
-            error: `This payment is already ${providerStatus.isEmpty ? 'finalized' : providerStatus} on NOWPayments and can no longer be cancelled.`,
+            error: `This payment is already ${providerStatus.length == 0 ? 'finalized' : providerStatus} on NOWPayments and can no longer be cancelled.`,
           },
           400,
         );
       }
 
-      if (providerStatus.isNotEmpty && !cancellableStatuses.has(providerStatus)) {
+      if (providerStatus.length > 0 && !cancellableStatuses.has(providerStatus)) {
         return jsonResponse(
           req,
           {
@@ -150,7 +150,7 @@ Deno.serve(async (req) => {
       cancelled_by_user: true,
       cancelled_at: new Date().toISOString(),
       cancellation_source: 'app',
-      provider_status_at_cancel: providerStatus.isEmpty ? null : providerStatus,
+      provider_status_at_cancel: providerStatus.length == 0 ? null : providerStatus,
       provider_cancel_check: providerStatusPayload,
     };
 

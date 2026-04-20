@@ -43,6 +43,21 @@ function durationDaysForPlan(plan: Record<string, unknown>, paymentAmount: numbe
   return 30;
 }
 
+function billingPeriodForPlan(plan: Record<string, unknown>, paymentAmount: number | null): string {
+  const annualPrice = plan.annual_price != null ? Number(plan.annual_price) : null;
+  const monthlyPrice = plan.monthly_price != null ? Number(plan.monthly_price) : null;
+
+  if (sameDayPrice(paymentAmount, annualPrice) && annualPrice != null) {
+    return 'annual';
+  }
+
+  if (sameDayPrice(paymentAmount, monthlyPrice) && monthlyPrice != null) {
+    return 'monthly';
+  }
+
+  return 'monthly';
+}
+
 async function activateSubscription(
   supabaseAdmin: ReturnType<typeof createClient>,
   paymentRow: Record<string, unknown>,
@@ -55,7 +70,7 @@ async function activateSubscription(
 
   const { data: plan, error: planError } = await supabaseAdmin
     .from('subscription_plans')
-    .select('id, monthly_price, annual_price')
+    .select('id, name, description, monthly_price, annual_price')
     .eq('id', planId)
     .single();
 
@@ -67,6 +82,10 @@ async function activateSubscription(
       ? Number(paymentRow.price_amount)
       : null;
   const durationDays = durationDaysForPlan(plan, paymentAmount);
+    const billingPeriod = billingPeriodForPlan(plan, paymentAmount);
+    const priceCurrency = paymentRow.price_currency != null
+      ? String(paymentRow.price_currency)
+      : 'usdt';
 
   const { data: existingSubscription } = await supabaseAdmin
     .from('user_subscriptions')
@@ -96,6 +115,11 @@ async function activateSubscription(
       expires_at: expiresAt.toISOString(),
       is_active: true,
       auto_renew: false,
+      plan_name_snapshot: plan.name ?? null,
+      plan_description_snapshot: plan.description ?? null,
+      price_amount_snapshot: paymentAmount,
+      price_currency_snapshot: priceCurrency,
+      billing_period_snapshot: billingPeriod,
       payment_provider: 'nowpayments',
       external_payment_id: providerPaymentId,
       stripe_subscription_id: null,

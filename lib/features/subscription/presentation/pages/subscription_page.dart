@@ -13,7 +13,8 @@ class SubscriptionPage extends ConsumerWidget {
   static const Color _currencyBaseColor = Color(0xFF5AE2B0);
 
   bool _isUpcomingPlan(SubscriptionPlanModel plan) {
-    return plan.tier == SubscriptionTier.platinum ||
+    return !plan.isActive ||
+        plan.tier == SubscriptionTier.platinum ||
         (plan.monthlyPrice == 0 && plan.name.toLowerCase() != 'free');
   }
 
@@ -637,7 +638,7 @@ class _PlanCard extends StatelessWidget {
         ? 'Upcoming'
         : isFreePlan
         ? 'Free'
-        : '\$${plan.monthlyPrice.toStringAsFixed(2)}/month';
+        : '${plan.monthlyPrice.toStringAsFixed(2)} USDT/month';
     final String buttonText = !isAuthenticated && !isUpcoming && !isFreePlan
         ? 'Create Account to Continue'
         : isUpcoming

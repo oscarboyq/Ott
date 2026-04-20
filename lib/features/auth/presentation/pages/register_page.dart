@@ -5,7 +5,9 @@ import 'package:video/core/providers/auth_provider.dart';
 import 'package:video/core/utils/validation_helper.dart';
 
 class RegisterPage extends ConsumerStatefulWidget {
-  const RegisterPage({super.key});
+  const RegisterPage({super.key, this.redirectTo});
+
+  final String? redirectTo;
 
   @override
   ConsumerState<RegisterPage> createState() => _RegisterPageState();
@@ -46,10 +48,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     );
 
     if (mounted && ref.read(authProvider).isAuthenticated) {
-      final redirectTo = GoRouterState.of(
-        context,
-      ).uri.queryParameters['redirectTo'];
-      context.go(redirectTo ?? '/');
+      context.go(widget.redirectTo ?? '/');
     }
   }
 
@@ -188,14 +187,11 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                 const Text('Already have an account? '),
                 TextButton(
                   onPressed: () {
-                    final redirectTo = GoRouterState.of(
-                      context,
-                    ).uri.queryParameters['redirectTo'];
                     final loginUri = Uri(
                       path: '/login',
-                      queryParameters: redirectTo == null
+                      queryParameters: widget.redirectTo == null
                           ? null
-                          : {'redirectTo': redirectTo},
+                          : {'redirectTo': widget.redirectTo!},
                     );
                     context.go(loginUri.toString());
                   },

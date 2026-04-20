@@ -6,6 +6,8 @@ import 'package:video/core/models/video_model.dart';
 import 'package:video/core/providers/auth_provider.dart';
 import 'package:video/core/providers/video_catalog_provider.dart';
 import 'package:video/core/providers/video_rating_provider.dart';
+import 'package:video/core/providers/watch_history_provider.dart';
+import 'package:video/core/utils/playback_source_resolver.dart';
 import 'package:video/features/video/presentation/widgets/bunny_web_player.dart';
 import 'package:video_player/video_player.dart';
 
@@ -65,6 +67,12 @@ class _ReelsPageState extends ConsumerState<ReelsPage> {
     return isPremiumUser;
   }
 
+  void _recordReelHistory(VideoModel reel) {
+    ref
+        .read(watchHistoryProvider.notifier)
+        .recordPlayback(video: reel, watchedSeconds: 0);
+  }
+
   Future<void> _clearActivePlayback() async {
     final previousController = _videoPlayerController;
     _videoPlayerController = null;
@@ -75,17 +83,6 @@ class _ReelsPageState extends ConsumerState<ReelsPage> {
     if (mounted) {
       setState(() {});
     }
-  }
-
-  bool _isBunnyStreamUrl(String videoUrl) {
-    final uri = Uri.tryParse(videoUrl);
-    if (uri == null) {
-      return false;
-    }
-
-    return uri.host.contains('mediadelivery.net') ||
-        uri.host.contains('b-cdn.net') ||
-        videoUrl.contains('/playlist.m3u8');
   }
 
   void _syncInitialIndex(List<VideoModel> reels) {
@@ -101,6 +98,7 @@ class _ReelsPageState extends ConsumerState<ReelsPage> {
       final firstReel = reels.first;
       if (_canWatchReel(reel: firstReel, isPremiumUser: isPremiumUser)) {
         _initializeControllerFor(firstReel.videoUrl);
+        _recordReelHistory(firstReel);
       }
       return;
     }
@@ -110,6 +108,7 @@ class _ReelsPageState extends ConsumerState<ReelsPage> {
       final firstReel = reels.first;
       if (_canWatchReel(reel: firstReel, isPremiumUser: isPremiumUser)) {
         _initializeControllerFor(firstReel.videoUrl);
+        _recordReelHistory(firstReel);
       }
       return;
     }
@@ -123,6 +122,7 @@ class _ReelsPageState extends ConsumerState<ReelsPage> {
       final reel = reels[initialIndex];
       if (_canWatchReel(reel: reel, isPremiumUser: isPremiumUser)) {
         _initializeControllerFor(reel.videoUrl);
+        _recordReelHistory(reel);
       }
       setState(() {});
     });
@@ -163,14 +163,17 @@ class _ReelsPageState extends ConsumerState<ReelsPage> {
     _isPlaying = true;
     await previousController?.dispose();
 
-    if (_isBunnyStreamUrl(videoUrl)) {
+    if (isBunnyStreamUrl(videoUrl)) {
       if (mounted) {
         setState(() {});
       }
       return;
     }
 
-    final controller = VideoPlayerController.networkUrl(Uri.parse(videoUrl));
+    final resolvedVideoUrl = resolvePlayableVideoUrl(videoUrl);
+    final controller = VideoPlayerController.networkUrl(
+      Uri.parse(resolvedVideoUrl),
+    );
     _videoPlayerController = controller;
 
     try {
@@ -206,6 +209,7 @@ class _ReelsPageState extends ConsumerState<ReelsPage> {
 
     if (canWatch) {
       await _initializeControllerFor(activeReel.videoUrl);
+      _recordReelHistory(activeReel);
       return;
     }
 
@@ -229,7 +233,7 @@ class _ReelsPageState extends ConsumerState<ReelsPage> {
   }
 
   bool get _activeVideoUrlIsNative =>
-      _activeVideoUrl != null && !_isBunnyStreamUrl(_activeVideoUrl!);
+      _activeVideoUrl != null && !isBunnyStreamUrl(_activeVideoUrl!);
 
   String _starCountLabel(int count) {
     if (count == 1) {
@@ -449,8 +453,7 @@ class _ReelsPageState extends ConsumerState<ReelsPage> {
                     videoPlayerController: isActive
                         ? _videoPlayerController
                         : null,
-                    useBunnyPlayer:
-                        isActive && _isBunnyStreamUrl(reel.videoUrl),
+                    useBunnyPlayer: isActive && isBunnyStreamUrl(reel.videoUrl),
                     onTap: isActive ? _togglePlayback : null,
                   );
                 },

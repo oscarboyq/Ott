@@ -15,6 +15,7 @@ class SubscriptionPlanModel extends Equatable {
   final bool adFree;
   final bool offlineDownload;
   final List<String> features;
+  final bool isActive;
 
   const SubscriptionPlanModel({
     required this.id,
@@ -29,6 +30,7 @@ class SubscriptionPlanModel extends Equatable {
     required this.adFree,
     required this.offlineDownload,
     required this.features,
+    required this.isActive,
   });
 
   factory SubscriptionPlanModel.fromJson(Map<String, dynamic> json) {
@@ -67,6 +69,7 @@ class SubscriptionPlanModel extends Equatable {
       adFree: json['adFree'] as bool? ?? false,
       offlineDownload: json['offlineDownload'] as bool? ?? false,
       features: featuresList,
+      isActive: json['is_active'] as bool? ?? true,
     );
   }
 
@@ -98,7 +101,40 @@ class SubscriptionPlanModel extends Equatable {
       'adFree': adFree,
       'offlineDownload': offlineDownload,
       'features': features,
+      'isActive': isActive,
     };
+  }
+
+  SubscriptionPlanModel copyWith({
+    String? id,
+    SubscriptionTier? tier,
+    String? name,
+    String? description,
+    double? monthlyPrice,
+    double? yearlyPrice,
+    int? maxDevices,
+    bool? hd,
+    bool? fourK,
+    bool? adFree,
+    bool? offlineDownload,
+    List<String>? features,
+    bool? isActive,
+  }) {
+    return SubscriptionPlanModel(
+      id: id ?? this.id,
+      tier: tier ?? this.tier,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      monthlyPrice: monthlyPrice ?? this.monthlyPrice,
+      yearlyPrice: yearlyPrice ?? this.yearlyPrice,
+      maxDevices: maxDevices ?? this.maxDevices,
+      hd: hd ?? this.hd,
+      fourK: fourK ?? this.fourK,
+      adFree: adFree ?? this.adFree,
+      offlineDownload: offlineDownload ?? this.offlineDownload,
+      features: features ?? this.features,
+      isActive: isActive ?? this.isActive,
+    );
   }
 
   @override
@@ -115,5 +151,6 @@ class SubscriptionPlanModel extends Equatable {
     adFree,
     offlineDownload,
     features,
+    isActive,
   ];
 }

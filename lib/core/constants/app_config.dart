@@ -45,10 +45,13 @@ class AppConstants {
   static const String refreshTokenKey = 'refresh_token';
   static const String userPreferencesKey = 'user_preferences';
   static const String watchlistCacheKey = 'watchlist_cache';
+  static const String watchHistoryCacheKey = 'watch_history_cache';
+  static const String seriesHistoryCacheKey = 'series_history_cache';
   static const String videoCatalogCacheKey = 'video_catalog_cache';
 
   // App Configuration
   static const int cacheDurationMinutes = 60;
+  static const int maxWatchHistoryItems = 10;
   static const int maxRetries = 3;
   static const Duration retryDelay = Duration(seconds: 2);
 }

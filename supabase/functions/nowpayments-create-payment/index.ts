@@ -82,6 +82,8 @@ Deno.serve(async (req) => {
       return jsonResponse(req, { error: 'Selected plan cannot be purchased' }, 400);
     }
 
+    const priceCurrency = payCurrency;
+
     const paymentId = crypto.randomUUID();
     const orderId = paymentId;
     const orderDescription = `Premium subscription for ${plan.name}`;
@@ -95,7 +97,7 @@ Deno.serve(async (req) => {
       order_id: orderId,
       payment_status: 'creating',
       price_amount: monthlyPrice,
-      price_currency: 'usd',
+      price_currency: priceCurrency,
       pay_currency: payCurrency,
       order_description: orderDescription,
       raw_response: {
@@ -115,7 +117,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         price_amount: monthlyPrice,
-        price_currency: 'usd',
+        price_currency: priceCurrency,
         pay_currency: payCurrency,
         order_id: orderId,
         order_description: orderDescription,
@@ -173,7 +175,7 @@ Deno.serve(async (req) => {
       plan_id: plan.id,
       order_id: orderId,
       price_amount: monthlyPrice,
-      price_currency: 'usd',
+      price_currency: priceCurrency,
       order_description: orderDescription,
       ...mappedPayment,
     }, 201);

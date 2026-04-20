@@ -15,11 +15,11 @@ class UserModel extends Equatable {
     required this.email,
     required this.username,
     this.profileImageUrl,
-    required this.isPremium,
+    required bool isPremium,
     this.isAdmin = false,
     required this.createdAt,
     this.premiumExpiresAt,
-  });
+  }) : isPremium = isPremium || isAdmin;
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(

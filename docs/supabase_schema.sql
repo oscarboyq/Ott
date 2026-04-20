@@ -59,6 +59,11 @@ CREATE TABLE IF NOT EXISTS user_subscriptions (
     started_at TIMESTAMP DEFAULT NOW(),
     expires_at TIMESTAMP NOT NULL,
     is_active BOOLEAN DEFAULT true,
+    plan_name_snapshot TEXT,
+    plan_description_snapshot TEXT,
+    price_amount_snapshot DECIMAL(10, 2),
+    price_currency_snapshot TEXT,
+    billing_period_snapshot TEXT,
     stripe_subscription_id TEXT,
     auto_renew BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT NOW(),
@@ -108,7 +113,8 @@ CREATE TABLE IF NOT EXISTS watch_history (
     video_id UUID NOT NULL REFERENCES videos ON DELETE CASCADE,
     watched_at TIMESTAMP DEFAULT NOW(),
     duration_watched_seconds INTEGER,
-    created_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(user_id, video_id)
 );
 
 -- ============================================================
@@ -153,6 +159,7 @@ CREATE INDEX IF NOT EXISTS idx_watchlist_video_id ON watchlist(video_id);
 CREATE INDEX IF NOT EXISTS idx_user_subscriptions_user_id ON user_subscriptions(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_subscriptions_active ON user_subscriptions(user_id) WHERE is_active = true;
 CREATE INDEX IF NOT EXISTS idx_watch_history_user_id ON watch_history(user_id, watched_at DESC);
+CREATE INDEX IF NOT EXISTS idx_watch_history_user_video ON watch_history(user_id, video_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id, created_at DESC);
 
 -- ============================================================

@@ -235,6 +235,182 @@ class ApiService {
     }
   }
 
+  Future<List<dynamic>> getSeriesCatalog({
+    int page = 1,
+    int limit = 20,
+    String? genre,
+    bool featuredOnly = false,
+  }) async {
+    try {
+      final offset = (page - 1) * limit;
+      var filterBuilder = _supabase
+          .from('series')
+          .select('*, series_seasons(id), series_episodes(id)');
+
+      if (genre != null && genre.isNotEmpty && genre != 'All') {
+        filterBuilder = filterBuilder.eq('category', genre);
+      }
+
+      if (featuredOnly) {
+        filterBuilder = filterBuilder.eq('is_featured', true);
+      }
+
+      final data = await filterBuilder
+          .order('created_at', ascending: false)
+          .range(offset, offset + limit - 1);
+
+      return (data as List<dynamic>)
+          .map((item) => _withSeriesCounts(item as Map<String, dynamic>))
+          .toList(growable: false);
+    } catch (e) {
+      throw UnknownException(e.toString());
+    }
+  }
+
+  Future<dynamic> getSeriesDetails(String seriesId) async {
+    try {
+      final data = await _supabase
+          .from('series')
+          .select('*, series_seasons(id), series_episodes(id)')
+          .eq('id', seriesId)
+          .maybeSingle();
+
+      if (data == null) {
+        return null;
+      }
+
+      return _withSeriesCounts(data);
+    } catch (e) {
+      throw UnknownException(e.toString());
+    }
+  }
+
+  Future<List<dynamic>> getSeriesSeasons(String seriesId) async {
+    try {
+      final data = await _supabase
+          .from('series_seasons')
+          .select('*, series_episodes(id)')
+          .eq('series_id', seriesId)
+          .order('season_number', ascending: true);
+
+      return (data as List<dynamic>)
+          .map((item) => _withSeasonEpisodeCount(item as Map<String, dynamic>))
+          .toList(growable: false);
+    } catch (e) {
+      throw UnknownException(e.toString());
+    }
+  }
+
+  Future<List<dynamic>> getSeasonEpisodes(String seasonId) async {
+    try {
+      final data = await _supabase
+          .from('series_episodes')
+          .select()
+          .eq('season_id', seasonId)
+          .order('episode_number', ascending: true);
+      return data as List<dynamic>;
+    } catch (e) {
+      throw UnknownException(e.toString());
+    }
+  }
+
+  Future<dynamic> getSeriesEpisodeDetails(String episodeId) async {
+    try {
+      return await _supabase
+          .from('series_episodes')
+          .select()
+          .eq('id', episodeId)
+          .maybeSingle();
+    } catch (e) {
+      throw UnknownException(e.toString());
+    }
+  }
+
+  Future<dynamic> getSeriesProgress(String seriesId) async {
+    try {
+      return await _supabase
+          .from('series_watch_progress')
+          .select()
+          .eq('series_id', seriesId)
+          .order('last_watched_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+    } catch (e) {
+      throw UnknownException(e.toString());
+    }
+  }
+
+  Future<List<dynamic>> getRecentSeriesHistory({
+    int limit = AppConstants.maxWatchHistoryItems,
+  }) async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) {
+        return const <dynamic>[];
+      }
+
+      final data = await _supabase
+          .from('series_watch_progress')
+          .select(
+            'id,user_id,series_id,season_id,episode_id,position_seconds,is_completed,last_watched_at,series:series_id(*, series_seasons(id), series_episodes(id)),episode:episode_id(*)',
+          )
+          .eq('user_id', user.id)
+          .order('last_watched_at', ascending: false)
+          .limit(limit);
+
+      return (data as List<dynamic>)
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          .where((row) => row['series'] != null && row['episode'] != null)
+          .toList(growable: false);
+    } catch (e) {
+      throw UnknownException(e.toString());
+    }
+  }
+
+  Future<void> saveSeriesProgress({
+    required String seriesId,
+    required String seasonId,
+    required String episodeId,
+    required int positionSeconds,
+    bool isCompleted = false,
+  }) async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) {
+        throw AuthException('User must be signed in to save series progress.');
+      }
+
+      await _supabase.from('series_watch_progress').upsert({
+        'user_id': user.id,
+        'series_id': seriesId,
+        'season_id': seasonId,
+        'episode_id': episodeId,
+        'position_seconds': positionSeconds,
+        'is_completed': isCompleted,
+        'last_watched_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'user_id,episode_id');
+    } catch (e) {
+      throw UnknownException(e.toString());
+    }
+  }
+
+  Map<String, dynamic> _withSeriesCounts(Map<String, dynamic> item) {
+    final seasons = item['series_seasons'] as List<dynamic>? ?? const [];
+    final episodes = item['series_episodes'] as List<dynamic>? ?? const [];
+
+    return {
+      ...item,
+      'season_count': seasons.length,
+      'episode_count': episodes.length,
+    };
+  }
+
+  Map<String, dynamic> _withSeasonEpisodeCount(Map<String, dynamic> item) {
+    final episodes = item['series_episodes'] as List<dynamic>? ?? const [];
+
+    return {...item, 'episode_count': episodes.length};
+  }
+
   Future<dynamic> getVideoDetails(String videoId) async {
     try {
       final data = await _supabase
@@ -330,6 +506,13 @@ class ApiService {
 
       final isFreeVideo = (video['is_free'] as bool?) ?? true;
       if (!isFreeVideo) {
+        final profile = await _supabase
+            .from('user_profiles')
+            .select('is_admin')
+            .eq('id', user.id)
+            .maybeSingle();
+        final isAdmin = profile?['is_admin'] as bool? ?? false;
+
         final activeSubscription = await _supabase
             .from('user_subscriptions')
             .select('id, expires_at')
@@ -341,8 +524,10 @@ class ApiService {
 
         final expiresAt = activeSubscription?['expires_at'] as String?;
         final hasPremiumAccess =
+            isAdmin ||
             expiresAt != null &&
-            (DateTime.tryParse(expiresAt)?.isAfter(DateTime.now()) ?? false);
+                (DateTime.tryParse(expiresAt)?.isAfter(DateTime.now()) ??
+                    false);
 
         if (!hasPremiumAccess) {
           throw AuthException(
@@ -432,6 +617,87 @@ class ApiService {
     }
   }
 
+  Future<List<dynamic>> getWatchHistory({
+    int limit = AppConstants.maxWatchHistoryItems,
+  }) async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) {
+        return const <dynamic>[];
+      }
+
+      final data = await _supabase
+          .from('watch_history')
+          .select(
+            '*,videos:video_id(id,title,description,thumbnail_url,video_url,category,rating,rating_count,duration_seconds,views_count,is_free,is_reel,is_featured,release_date,created_at,director,cast)',
+          )
+          .eq('user_id', user.id)
+          .order('watched_at', ascending: false)
+          .limit(limit);
+      return data as List<dynamic>;
+    } catch (e) {
+      throw UnknownException(e.toString());
+    }
+  }
+
+  Future<void> saveWatchHistory({
+    required String videoId,
+    required int durationWatchedSeconds,
+  }) async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) {
+        throw AuthException('User must be signed in to save watch history.');
+      }
+
+      final now = DateTime.now().toUtc().toIso8601String();
+      // UPSERT on the unique (user_id, video_id) constraint so that re-watches
+      // correctly update the existing row rather than silently failing.
+      await _supabase.from('watch_history').upsert({
+        'user_id': user.id,
+        'video_id': videoId,
+        'duration_watched_seconds': durationWatchedSeconds,
+        'watched_at': now,
+      }, onConflict: 'user_id,video_id');
+
+      await _trimWatchHistory();
+    } catch (e) {
+      throw UnknownException(e.toString());
+    }
+  }
+
+  Future<void> _trimWatchHistory() async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) {
+      return;
+    }
+
+    final items = await _supabase
+        .from('watch_history')
+        .select('id')
+        .eq('user_id', user.id)
+        .order('watched_at', ascending: false);
+
+    final rows = (items as List<dynamic>)
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList(growable: false);
+
+    if (rows.length <= AppConstants.maxWatchHistoryItems) {
+      return;
+    }
+
+    final overflowIds = rows
+        .skip(AppConstants.maxWatchHistoryItems)
+        .map((row) => row['id'] as String)
+        .toList(growable: false);
+
+    if (overflowIds.isEmpty) {
+      return;
+    }
+
+    await _supabase.from('watch_history').delete().inFilter('id', overflowIds);
+  }
+
   // Subscription APIs - Using Supabase SDK
   Future<List<dynamic>> getSubscriptionPlans({
     bool includeInactive = false,
@@ -456,7 +722,9 @@ class ApiService {
     try {
       final data = await _supabase
           .from('user_subscriptions')
-          .select('*,plan:plan_id(id,name,monthly_price,features)')
+          .select(
+            '*,plan:plan_id(id,name,monthly_price,annual_price,features,is_active)',
+          )
           .eq('is_active', true)
           .maybeSingle();
       return data;
@@ -467,11 +735,26 @@ class ApiService {
 
   Future<dynamic> upgradeSubscription(String planId) async {
     try {
+      final plan = await _supabase
+          .from('subscription_plans')
+          .select('id,name,description,monthly_price')
+          .eq('id', planId)
+          .maybeSingle();
+
+      if (plan == null) {
+        throw ServerException('Subscription plan not found', 404);
+      }
+
       final data = await _supabase
           .from('user_subscriptions')
           .insert({
             'plan_id': planId,
             'auto_renew': true,
+            'plan_name_snapshot': plan['name'],
+            'plan_description_snapshot': plan['description'],
+            'price_amount_snapshot': plan['monthly_price'],
+            'price_currency_snapshot': 'usdt',
+            'billing_period_snapshot': 'monthly',
             'expires_at': DateTime.now()
                 .add(const Duration(days: 30))
                 .toIso8601String(),

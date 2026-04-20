@@ -316,6 +316,10 @@ Response:
     "user_id": "uuid",
     "plan_id": "uuid",
     "expires_at": "2024-12-31T23:59:59Z",
+    "plan_name_snapshot": "Premium",
+    "price_amount_snapshot": 9.99,
+    "price_currency_snapshot": "usdt",
+    "billing_period_snapshot": "monthly",
     "plan": {
       "id": "uuid",
       "name": "Premium",
@@ -401,6 +405,8 @@ Authorization: Bearer ACCESS_TOKEN
   "duration_watched_seconds": 1500
 }
 ```
+
+History rows are unique per `(user_id, video_id)`. Rewatching the same video updates the existing row instead of inserting a duplicate.
 
 ---
 

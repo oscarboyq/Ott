@@ -5,7 +5,9 @@ import 'package:video/core/providers/auth_provider.dart';
 import 'package:video/core/utils/validation_helper.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
-  const LoginPage({super.key});
+  const LoginPage({super.key, this.redirectTo});
+
+  final String? redirectTo;
 
   @override
   ConsumerState<LoginPage> createState() => _LoginPageState();
@@ -33,10 +35,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           password: _passwordController.text,
         );
     if (mounted && ref.read(authProvider).isAuthenticated) {
-      final redirectTo = GoRouterState.of(
-        context,
-      ).uri.queryParameters['redirectTo'];
-      context.go(redirectTo ?? '/');
+      context.go(widget.redirectTo ?? '/');
     }
   }
 
@@ -325,7 +324,15 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                               style: TextStyle(color: Colors.white54),
                             ),
                             TextButton(
-                              onPressed: () => context.push('/register'),
+                              onPressed: () {
+                                final registerUri = Uri(
+                                  path: '/register',
+                                  queryParameters: widget.redirectTo == null
+                                      ? null
+                                      : {'redirectTo': widget.redirectTo!},
+                                );
+                                context.push(registerUri.toString());
+                              },
                               child: const Text(
                                 'Sign Up',
                                 style: TextStyle(

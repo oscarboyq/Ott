@@ -90,6 +90,7 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
       final subscriptions = await Supabase.instance.client
           .from('user_subscriptions')
           .select('expires_at')
+          .eq('user_id', supabaseUser.id)
           .eq('is_active', true)
           .order('expires_at', ascending: false)
           .limit(1);
@@ -107,6 +108,10 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
       }
     } catch (e) {
       debugPrint('Failed to fetch premium status: $e');
+    }
+
+    if (isAdmin) {
+      isPremium = true;
     }
 
     return UserModel(

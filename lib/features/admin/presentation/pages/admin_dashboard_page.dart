@@ -6,6 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
+import 'package:video/core/models/series_episode_model.dart';
+import 'package:video/core/models/series_model.dart';
+import 'package:video/core/models/series_season_model.dart';
+import 'package:video/core/models/subscription_plan_model.dart';
 import 'package:video/core/models/video_model.dart';
 import 'package:video/core/providers/admin_provider.dart';
 import 'package:video/core/providers/auth_provider.dart';
@@ -14,6 +18,178 @@ import 'package:video/core/utils/image_picker_service.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 // ADMIN DASHBOARD PAGE
 // ─────────────────────────────────────────────────────────────────────────────
+
+const List<String> _genreFilterItems = [
+  'Action',
+  'Animation',
+  'Comedy',
+  'Drama',
+  'Horror',
+  'Romance',
+  'Thriller',
+  'Sci-Fi',
+];
+
+List<String> _genreDropdownItems(String currentGenre) {
+  final trimmedGenre = currentGenre.trim();
+  if (trimmedGenre.isEmpty || _genreFilterItems.contains(trimmedGenre)) {
+    return _genreFilterItems;
+  }
+
+  return [
+    _genreFilterItems.first,
+    trimmedGenre,
+    ..._genreFilterItems.where((genre) => genre != trimmedGenre),
+  ];
+}
+
+String _genreDropdownValue(String currentGenre) {
+  final trimmedGenre = currentGenre.trim();
+  if (trimmedGenre.isEmpty) {
+    return 'Drama';
+  }
+
+  return trimmedGenre;
+}
+
+const Uuid _adminImageUuid = Uuid();
+
+String _formatAdminUploadError(Object error) {
+  if (error is StorageException) {
+    return 'StorageException: ${error.message}';
+  }
+  if (error is PostgrestException) {
+    return 'PostgrestException: ${error.message}';
+  }
+  if (error is AuthException) {
+    return 'AuthException: ${error.message}';
+  }
+  return '${error.runtimeType}: $error';
+}
+
+String _extractAdminImageFileExtension(String fileName) {
+  final int dotIndex = fileName.lastIndexOf('.');
+  if (dotIndex == -1 || dotIndex == fileName.length - 1) {
+    return 'jpg';
+  }
+  return fileName.substring(dotIndex + 1).toLowerCase();
+}
+
+String _adminImageContentType(String extension) {
+  switch (extension) {
+    case 'png':
+      return 'image/png';
+    case 'webp':
+      return 'image/webp';
+    case 'gif':
+      return 'image/gif';
+    case 'jpg':
+    case 'jpeg':
+    default:
+      return 'image/jpeg';
+  }
+}
+
+Future<String?> _pickAndUploadAdminImage() async {
+  final pickedFile = await pickImageFile();
+  if (pickedFile == null) {
+    return null;
+  }
+
+  final String extension = _extractAdminImageFileExtension(pickedFile.name);
+  final String contentType = _adminImageContentType(extension);
+  final String filePath =
+      'admin/${_adminImageUuid.v4()}.${extension.isEmpty ? 'jpg' : extension}';
+
+  await Supabase.instance.client.storage
+      .from('thumbnails')
+      .uploadBinary(
+        filePath,
+        pickedFile.bytes,
+        fileOptions: FileOptions(contentType: contentType),
+      );
+
+  return Supabase.instance.client.storage
+      .from('thumbnails')
+      .getPublicUrl(filePath);
+}
+
+void _showAdminImageUploadError({
+  required BuildContext context,
+  required String fieldLabel,
+  required Object error,
+  required StackTrace stackTrace,
+}) {
+  final message = _formatAdminUploadError(error);
+  debugPrint('[AdminDashboardPage] $fieldLabel upload failed: $message');
+  debugPrintStack(stackTrace: stackTrace);
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text('$fieldLabel upload failed: $message'),
+      backgroundColor: const Color(0xFFF05454),
+      duration: const Duration(seconds: 6),
+    ),
+  );
+}
+
+InputDecoration _adminFieldDecoration(String hint) {
+  return InputDecoration(
+    hintText: hint,
+    hintStyle: const TextStyle(color: Colors.white24, fontSize: 14),
+    filled: true,
+    fillColor: const Color(0xFF162235),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: const BorderSide(color: Color(0xFF243247)),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: const BorderSide(color: Color(0xFF243247)),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: const BorderSide(color: Color(0xFF1F9DCC)),
+    ),
+    errorBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: const BorderSide(color: Color(0xFFF05454)),
+    ),
+    focusedErrorBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: const BorderSide(color: Color(0xFFF05454)),
+    ),
+    errorStyle: const TextStyle(color: Color(0xFFF05454), fontSize: 11),
+  );
+}
+
+Widget _adminGenreDropdownField(
+  TextEditingController ctrl, {
+  String hint = 'Select genre',
+  String? Function(String?)? validator,
+}) {
+  final genreItems = _genreDropdownItems(ctrl.text);
+  return DropdownButtonFormField<String>(
+    value: _genreDropdownValue(ctrl.text),
+    validator: validator,
+    dropdownColor: const Color(0xFF162235),
+    iconEnabledColor: Colors.white70,
+    style: const TextStyle(color: Colors.white, fontSize: 14),
+    decoration: _adminFieldDecoration(hint),
+    items: genreItems
+        .map(
+          (genre) => DropdownMenuItem<String>(value: genre, child: Text(genre)),
+        )
+        .toList(),
+    onChanged: (value) {
+      if (value == null) {
+        return;
+      }
+      ctrl.text = value;
+    },
+  );
+}
 
 class AdminDashboardPage extends ConsumerStatefulWidget {
   const AdminDashboardPage({super.key});
@@ -30,6 +206,8 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(adminProvider.notifier).loadVideos();
+      ref.read(adminProvider.notifier).loadSeries();
+      ref.read(adminProvider.notifier).loadSubscriptionPlans();
     });
   }
 
@@ -84,6 +262,10 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
                 Expanded(
                   child: _section == _AdminSection.videos
                       ? _VideosSection(adminState: adminState)
+                      : _section == _AdminSection.series
+                      ? _SeriesSection(adminState: adminState)
+                      : _section == _AdminSection.subscriptions
+                      ? _SubscriptionsSection(adminState: adminState)
                       : _UsersSection(),
                 ),
               ],
@@ -99,7 +281,7 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
 // Section enum
 // ─────────────────────────────────────────────────────────────────────────────
 
-enum _AdminSection { videos, users }
+enum _AdminSection { videos, series, subscriptions, users }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SIDEBAR
@@ -179,6 +361,18 @@ class _Sidebar extends StatelessWidget {
             label: 'Videos',
             selected: selected == _AdminSection.videos,
             onTap: () => onSelect(_AdminSection.videos),
+          ),
+          _NavItem(
+            icon: Icons.live_tv_rounded,
+            label: 'Series',
+            selected: selected == _AdminSection.series,
+            onTap: () => onSelect(_AdminSection.series),
+          ),
+          _NavItem(
+            icon: Icons.workspace_premium_outlined,
+            label: 'Subscriptions',
+            selected: selected == _AdminSection.subscriptions,
+            onTap: () => onSelect(_AdminSection.subscriptions),
           ),
           _NavItem(
             icon: Icons.people_outline,
@@ -319,9 +513,12 @@ class _TopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = section == _AdminSection.videos
-        ? 'Video Management'
-        : 'User Management';
+    final title = switch (section) {
+      _AdminSection.videos => 'Video Management',
+      _AdminSection.series => 'Series Management',
+      _AdminSection.subscriptions => 'Subscription Plans',
+      _AdminSection.users => 'User Management',
+    };
     return Container(
       height: 64,
       color: const Color(0xFF0D1520),
@@ -346,6 +543,1190 @@ class _TopBar extends StatelessWidget {
                 valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFF05454)),
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SubscriptionsSection extends ConsumerStatefulWidget {
+  const _SubscriptionsSection({required this.adminState});
+
+  final AdminState adminState;
+
+  @override
+  ConsumerState<_SubscriptionsSection> createState() =>
+      _SubscriptionsSectionState();
+}
+
+class _SubscriptionsSectionState extends ConsumerState<_SubscriptionsSection> {
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final allPlans = widget.adminState.subscriptionPlans;
+    final filteredPlans = allPlans
+        .where((plan) {
+          if (_searchQuery.isEmpty) {
+            return true;
+          }
+
+          final query = _searchQuery.toLowerCase();
+          return plan.name.toLowerCase().contains(query) ||
+              plan.description.toLowerCase().contains(query);
+        })
+        .toList(growable: false);
+
+    final activePlans = allPlans.where((plan) => plan.monthlyPrice > 0).length;
+    final enabledPlans = allPlans.where((plan) => plan.isActive).length;
+    final disabledPlans = allPlans.where((plan) => !plan.isActive).length;
+
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 16,
+            runSpacing: 16,
+            children: [
+              _StatCard(
+                label: 'Total Plans',
+                value: '${allPlans.length}',
+                icon: Icons.view_carousel_outlined,
+                color: const Color(0xFF1F9DCC),
+              ),
+              _StatCard(
+                label: 'Paid Plans',
+                value: '$activePlans',
+                icon: Icons.payments_outlined,
+                color: const Color(0xFF21A45D),
+              ),
+              _StatCard(
+                label: 'Purchasable',
+                value: '$enabledPlans',
+                icon: Icons.workspace_premium_outlined,
+                color: const Color(0xFFFFB44C),
+              ),
+              _StatCard(
+                label: 'Disabled Paid',
+                value: '$disabledPlans',
+                icon: Icons.pause_circle_outline_rounded,
+                color: const Color(0xFFF05454),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              SizedBox(
+                width: 320,
+                height: 40,
+                child: TextField(
+                  controller: _searchCtrl,
+                  onChanged: (value) => setState(() => _searchQuery = value),
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: 'Search plans...',
+                    hintStyle: const TextStyle(
+                      color: Colors.white38,
+                      fontSize: 14,
+                    ),
+                    filled: true,
+                    fillColor: const Color(0xFF162235),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFF243247)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFF243247)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFF1F9DCC)),
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.search,
+                      color: Colors.white38,
+                      size: 18,
+                    ),
+                  ),
+                ),
+              ),
+              const Spacer(),
+              const Text(
+                'Price changes affect new subscriptions only.',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF0D1520),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF1A2840)),
+              ),
+              child: Column(
+                children: [
+                  const _SubscriptionPlansHeader(),
+                  const Divider(color: Color(0xFF1A2840), height: 1),
+                  Expanded(
+                    child: filteredPlans.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'No subscription plans found',
+                              style: TextStyle(color: Colors.white38),
+                            ),
+                          )
+                        : ListView.separated(
+                            itemCount: filteredPlans.length,
+                            separatorBuilder: (_, __) => const Divider(
+                              color: Color(0xFF1A2840),
+                              height: 1,
+                            ),
+                            itemBuilder: (context, index) {
+                              final plan = filteredPlans[index];
+                              return _SubscriptionPlanRow(
+                                plan: plan,
+                                onEdit: () => _showPlanEditor(context, plan),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showPlanEditor(BuildContext context, SubscriptionPlanModel plan) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _SubscriptionPlanFormDialog(existing: plan),
+    );
+  }
+}
+
+class _SubscriptionPlansHeader extends StatelessWidget {
+  const _SubscriptionPlansHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: Text(
+              'PLAN',
+              style: TextStyle(
+                color: Colors.white38,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 120,
+            child: Text(
+              'MONTHLY',
+              style: TextStyle(
+                color: Colors.white38,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 120,
+            child: Text(
+              'ANNUAL',
+              style: TextStyle(
+                color: Colors.white38,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 120,
+            child: Text(
+              'STATUS',
+              style: TextStyle(
+                color: Colors.white38,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 90,
+            child: Text(
+              'ACTIONS',
+              style: TextStyle(
+                color: Colors.white38,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SubscriptionPlanRow extends StatelessWidget {
+  const _SubscriptionPlanRow({required this.plan, required this.onEdit});
+
+  final SubscriptionPlanModel plan;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final isFreePlan =
+        plan.monthlyPrice == 0 && plan.name.toLowerCase() == 'free';
+    final isPurchasable = plan.isActive && plan.monthlyPrice > 0;
+    final statusColor = isFreePlan
+        ? const Color(0xFF1F9DCC)
+        : isPurchasable
+        ? const Color(0xFF21A45D)
+        : const Color(0xFFF05454);
+    final statusLabel = isFreePlan
+        ? 'Free'
+        : isPurchasable
+        ? 'Active'
+        : 'Disabled';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  plan.name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (plan.description.isNotEmpty)
+                  Text(
+                    plan.description,
+                    style: const TextStyle(color: Colors.white38, fontSize: 11),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2,
+                  ),
+              ],
+            ),
+          ),
+          SizedBox(
+            width: 120,
+            child: Text(
+              plan.monthlyPrice <= 0
+                  ? '0.00'
+                  : plan.monthlyPrice.toStringAsFixed(2),
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+          ),
+          SizedBox(
+            width: 120,
+            child: Text(
+              plan.yearlyPrice <= 0 ? '-' : plan.yearlyPrice.toStringAsFixed(2),
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+          ),
+          SizedBox(
+            width: 120,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: statusColor),
+              ),
+              child: Text(
+                statusLabel,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: statusColor,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 90,
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(
+                    Icons.edit_outlined,
+                    size: 18,
+                    color: Color(0xFF1F9DCC),
+                  ),
+                  onPressed: onEdit,
+                  tooltip: 'Edit plan',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SubscriptionPlanFormDialog extends ConsumerStatefulWidget {
+  const _SubscriptionPlanFormDialog({required this.existing});
+
+  final SubscriptionPlanModel existing;
+
+  @override
+  ConsumerState<_SubscriptionPlanFormDialog> createState() =>
+      _SubscriptionPlanFormDialogState();
+}
+
+class _SubscriptionPlanFormDialogState
+    extends ConsumerState<_SubscriptionPlanFormDialog> {
+  final _formKey = GlobalKey<FormState>();
+
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _descCtrl;
+  late final TextEditingController _monthlyCtrl;
+  late final TextEditingController _annualCtrl;
+  late final TextEditingController _featuresCtrl;
+
+  late bool _isActive;
+  bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final plan = widget.existing;
+    _nameCtrl = TextEditingController(text: plan.name);
+    _descCtrl = TextEditingController(text: plan.description);
+    _monthlyCtrl = TextEditingController(
+      text: plan.monthlyPrice.toStringAsFixed(2),
+    );
+    _annualCtrl = TextEditingController(
+      text: plan.yearlyPrice.toStringAsFixed(2),
+    );
+    _featuresCtrl = TextEditingController(text: plan.features.join('\n'));
+    _isActive = plan.isActive;
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _descCtrl.dispose();
+    _monthlyCtrl.dispose();
+    _annualCtrl.dispose();
+    _featuresCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: const Color(0xFF0D1520),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: SizedBox(
+        width: 620,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(28),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    const Text(
+                      'Edit Subscription Plan',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white54),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Divider(color: Color(0xFF1A2840)),
+                const SizedBox(height: 16),
+                _FormField(
+                  label: 'Plan Name *',
+                  child: _adminTextField(
+                    _nameCtrl,
+                    'Premium',
+                    validator: _requiredField,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _FormField(
+                  label: 'Description',
+                  child: _adminTextField(
+                    _descCtrl,
+                    'Unlock premium playback',
+                    maxLines: 3,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _FormField(
+                        label: 'Monthly Price *',
+                        child: _adminTextField(
+                          _monthlyCtrl,
+                          '10.00',
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          validator: _priceField,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _FormField(
+                        label: 'Annual Price',
+                        child: _adminTextField(
+                          _annualCtrl,
+                          '0.00',
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          validator: _optionalPriceField,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _FormField(
+                  label: 'Features',
+                  child: _adminTextField(
+                    _featuresCtrl,
+                    'One feature per line',
+                    maxLines: 6,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Checkbox(
+                      value: _isActive,
+                      onChanged: (value) =>
+                          setState(() => _isActive = value ?? false),
+                      activeColor: const Color(0xFF21A45D),
+                      side: const BorderSide(color: Colors.white38),
+                    ),
+                    const Text(
+                      'Enable plan for future purchases',
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  'Existing subscribers keep their stored subscription price. Changes here only affect new purchases and renewals created after the edit.',
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+                const SizedBox(height: 24),
+                const Divider(color: Color(0xFF1A2840)),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: _isSubmitting
+                          ? null
+                          : () => Navigator.of(context).pop(),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(color: Colors.white54),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFF05454),
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: _isSubmitting ? null : _submit,
+                      child: _isSubmitting
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                              ),
+                            )
+                          : const Text('Save Changes'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String? _requiredField(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Required';
+    }
+    return null;
+  }
+
+  String? _priceField(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Required';
+    }
+
+    final parsedValue = double.tryParse(value.trim());
+    if (parsedValue == null) {
+      return 'Enter a valid number';
+    }
+    if (parsedValue < 0) {
+      return 'Must be 0 or higher';
+    }
+    return null;
+  }
+
+  String? _optionalPriceField(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return null;
+    }
+
+    final parsedValue = double.tryParse(value.trim());
+    if (parsedValue == null) {
+      return 'Enter a valid number';
+    }
+    if (parsedValue < 0) {
+      return 'Must be 0 or higher';
+    }
+    return null;
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+    final monthlyPrice = double.parse(_monthlyCtrl.text.trim());
+    final yearlyPrice =
+        double.tryParse(
+          _annualCtrl.text.trim().isEmpty ? '0' : _annualCtrl.text.trim(),
+        ) ??
+        0;
+    final features = _featuresCtrl.text
+        .split(RegExp(r'\r?\n'))
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+
+    final success = await ref
+        .read(adminProvider.notifier)
+        .updateSubscriptionPlan(
+          id: widget.existing.id,
+          name: _nameCtrl.text,
+          description: _descCtrl.text,
+          monthlyPrice: monthlyPrice,
+          yearlyPrice: yearlyPrice,
+          features: features,
+          isActive: _isActive,
+        );
+
+    if (mounted) {
+      setState(() => _isSubmitting = false);
+      if (success) {
+        Navigator.of(context).pop();
+      }
+    }
+  }
+}
+
+class _SeriesSection extends ConsumerStatefulWidget {
+  const _SeriesSection({required this.adminState});
+
+  final AdminState adminState;
+
+  @override
+  ConsumerState<_SeriesSection> createState() => _SeriesSectionState();
+}
+
+class _SeriesSectionState extends ConsumerState<_SeriesSection> {
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final allSeries = widget.adminState.series;
+    final seriesStatusMessage = widget.adminState.seriesStatusMessage;
+    final filteredSeries = allSeries
+        .where((item) {
+          if (_searchQuery.isEmpty) {
+            return true;
+          }
+          final query = _searchQuery.toLowerCase();
+          return item.title.toLowerCase().contains(query) ||
+              item.genre.toLowerCase().contains(query);
+        })
+        .toList(growable: false);
+
+    final featuredCount = allSeries.where((item) => item.isFeatured).length;
+    final freeCount = allSeries.where((item) => !item.requiresPremium).length;
+    final premiumCount = allSeries.where((item) => item.requiresPremium).length;
+
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 16,
+            runSpacing: 16,
+            children: [
+              _StatCard(
+                label: 'Total Series',
+                value: '${allSeries.length}',
+                icon: Icons.live_tv_rounded,
+                color: const Color(0xFF1F9DCC),
+              ),
+              _StatCard(
+                label: 'Featured',
+                value: '$featuredCount',
+                icon: Icons.workspace_premium_outlined,
+                color: const Color(0xFFFFB44C),
+              ),
+              _StatCard(
+                label: 'Free Entry',
+                value: '$freeCount',
+                icon: Icons.lock_open_rounded,
+                color: const Color(0xFF21A45D),
+              ),
+              _StatCard(
+                label: 'Premium',
+                value: '$premiumCount',
+                icon: Icons.lock_outline_rounded,
+                color: const Color(0xFFF05454),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              SizedBox(
+                width: 280,
+                height: 40,
+                child: TextField(
+                  controller: _searchCtrl,
+                  onChanged: (value) => setState(() => _searchQuery = value),
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: 'Search series...',
+                    hintStyle: const TextStyle(
+                      color: Colors.white38,
+                      fontSize: 14,
+                    ),
+                    filled: true,
+                    fillColor: const Color(0xFF162235),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFF243247)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFF243247)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFF1F9DCC)),
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.search,
+                      color: Colors.white38,
+                      size: 18,
+                    ),
+                  ),
+                ),
+              ),
+              const Spacer(),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFF05454),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 10,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text(
+                  'Add Series',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                onPressed: () => _showSeriesForm(context),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF0D1520),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF1A2840)),
+              ),
+              child: Column(
+                children: [
+                  if (seriesStatusMessage != null)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: const BoxDecoration(
+                        color: Color(0x221F9DCC),
+                        border: Border(
+                          bottom: BorderSide(color: Color(0xFF1A2840)),
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.info_outline_rounded,
+                            color: Color(0xFF7CC6E6),
+                            size: 18,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              seriesStatusMessage,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const _SeriesTableHeader(),
+                  const Divider(color: Color(0xFF1A2840), height: 1),
+                  Expanded(
+                    child: filteredSeries.isEmpty
+                        ? Center(
+                            child: Text(
+                              _searchQuery.isEmpty
+                                  ? 'No series yet'
+                                  : 'No matching series',
+                              style: const TextStyle(color: Colors.white38),
+                            ),
+                          )
+                        : ListView.separated(
+                            itemCount: filteredSeries.length,
+                            separatorBuilder: (_, __) => const Divider(
+                              color: Color(0xFF1A2840),
+                              height: 1,
+                            ),
+                            itemBuilder: (context, index) {
+                              final item = filteredSeries[index];
+                              return _SeriesRow(
+                                key: ValueKey<String>(item.id),
+                                series: item,
+                                onManage: () =>
+                                    _showSeriesStructure(context, item),
+                                onEdit: () =>
+                                    _showSeriesForm(context, existing: item),
+                                onDelete: () =>
+                                    _confirmDeleteSeries(context, item),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSeriesForm(BuildContext context, {SeriesModel? existing}) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _SeriesFormDialog(existing: existing),
+    );
+  }
+
+  void _showSeriesStructure(BuildContext context, SeriesModel series) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _SeriesStructureDialog(series: series),
+    );
+  }
+
+  void _confirmDeleteSeries(BuildContext context, SeriesModel series) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF0D1520),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Text(
+          'Delete Series',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          'Delete "${series.title}" and all seasons and episodes under it?',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white54),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFF05454),
+            ),
+            onPressed: () {
+              Navigator.of(context).pop();
+              ref.read(adminProvider.notifier).deleteSeries(series.id);
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SeriesTableHeader extends StatelessWidget {
+  const _SeriesTableHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: Text(
+              'TITLE',
+              style: TextStyle(
+                color: Colors.white38,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              'GENRE',
+              style: TextStyle(
+                color: Colors.white38,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 120,
+            child: Text(
+              'STRUCTURE',
+              style: TextStyle(
+                color: Colors.white38,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 90,
+            child: Text(
+              'ACCESS',
+              style: TextStyle(
+                color: Colors.white38,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 90,
+            child: Text(
+              'FEATURED',
+              style: TextStyle(
+                color: Colors.white38,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 140,
+            child: Text(
+              'ACTIONS',
+              style: TextStyle(
+                color: Colors.white38,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SeriesRow extends StatelessWidget {
+  const _SeriesRow({
+    super.key,
+    required this.series,
+    required this.onManage,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final SeriesModel series;
+  final VoidCallback onManage;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: SizedBox(
+                    width: 60,
+                    height: 40,
+                    child: series.posterUrl.isNotEmpty
+                        ? Image.network(
+                            series.posterUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              color: const Color(0xFF162235),
+                              child: const Icon(
+                                Icons.live_tv_rounded,
+                                color: Colors.white24,
+                                size: 20,
+                              ),
+                            ),
+                          )
+                        : Container(
+                            color: const Color(0xFF162235),
+                            child: const Icon(
+                              Icons.live_tv_rounded,
+                              color: Colors.white24,
+                              size: 20,
+                            ),
+                          ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        series.title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (series.tagline.isNotEmpty)
+                        Text(
+                          series.tagline,
+                          style: const TextStyle(
+                            color: Colors.white38,
+                            fontSize: 11,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              series.genre,
+              style: const TextStyle(color: Colors.white60, fontSize: 13),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          SizedBox(
+            width: 120,
+            child: Text(
+              '${series.seasonCount} seasons / ${series.episodeCount} eps',
+              style: const TextStyle(color: Colors.white60, fontSize: 12),
+            ),
+          ),
+          SizedBox(
+            width: 90,
+            child: Text(
+              series.requiresPremium ? 'Premium' : 'Free',
+              style: TextStyle(
+                color: series.requiresPremium
+                    ? const Color(0xFFF05454)
+                    : const Color(0xFF21A45D),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 90,
+            child: Icon(
+              series.isFeatured
+                  ? Icons.star_rounded
+                  : Icons.star_border_rounded,
+              color: series.isFeatured
+                  ? const Color(0xFFFFB44C)
+                  : Colors.white30,
+            ),
+          ),
+          SizedBox(
+            width: 140,
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(
+                    Icons.account_tree_outlined,
+                    size: 18,
+                    color: Color(0xFF1F9DCC),
+                  ),
+                  onPressed: onManage,
+                  tooltip: 'Manage seasons and episodes',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(
+                    Icons.edit_outlined,
+                    size: 18,
+                    color: Color(0xFF1F9DCC),
+                  ),
+                  onPressed: onEdit,
+                  tooltip: 'Edit series',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    size: 18,
+                    color: Color(0xFFF05454),
+                  ),
+                  onPressed: onDelete,
+                  tooltip: 'Delete series',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -876,7 +2257,7 @@ class _VideoRow extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final ValueChanged<bool> onToggleFree;
-  final ValueChanged<bool> onToggleFeatured;
+  final ValueChanged<bool>? onToggleFeatured;
 
   const _VideoRow({
     super.key,
@@ -1025,13 +2406,23 @@ class _VideoRow extends StatelessWidget {
           // Featured toggle
           SizedBox(
             width: 90,
-            child: Switch(
-              key: ValueKey<String>('featured-${video.id}-${video.isFeatured}'),
-              value: video.isFeatured,
-              onChanged: onToggleFeatured,
-              activeColor: const Color(0xFFFFB44C),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
+            child: video.isReel
+                ? const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'N/A',
+                      style: TextStyle(color: Colors.white38, fontSize: 12),
+                    ),
+                  )
+                : Switch(
+                    key: ValueKey<String>(
+                      'featured-${video.id}-${video.isFeatured}',
+                    ),
+                    value: video.isFeatured,
+                    onChanged: onToggleFeatured,
+                    activeColor: const Color(0xFFFFB44C),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
           ),
 
           // Actions
@@ -1100,7 +2491,6 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
   late final TextEditingController _videoUrlCtrl;
   late final TextEditingController _genreCtrl;
   late final TextEditingController _durationCtrl;
-  late final TextEditingController _directorCtrl;
 
   bool _isFree = true;
   bool _isReel = false;
@@ -1150,7 +2540,6 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
     _durationCtrl = TextEditingController(
       text: v != null ? '${v.duration}' : '',
     );
-    _directorCtrl = TextEditingController(text: v?.director ?? '');
     _isFree = v != null ? !v.requiresPremium : true;
     _isReel = v?.isReel ?? widget.initialIsReel;
     _isFeatured = v?.isFeatured ?? false;
@@ -1165,7 +2554,6 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
     _videoUrlCtrl.dispose();
     _genreCtrl.dispose();
     _durationCtrl.dispose();
-    _directorCtrl.dispose();
     super.dispose();
   }
 
@@ -1335,7 +2723,10 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                     Expanded(
                       child: _FormField(
                         label: 'Genre',
-                        child: _textField(_genreCtrl, 'Drama, Action...'),
+                        child: _adminGenreDropdownField(
+                          _genreCtrl,
+                          hint: 'Select genre',
+                        ),
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -1364,35 +2755,7 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 14),
-
-                // Director
-                _FormField(
-                  label: 'Director',
-                  child: _textField(_directorCtrl, 'Optional'),
-                ),
                 const SizedBox(height: 20),
-
-                Row(
-                  children: [
-                    _ToggleChip(
-                      label: 'Video',
-                      selected: !_isReel,
-                      activeColor: const Color(0xFF1F9DCC),
-                      icon: Icons.movie_creation_outlined,
-                      onTap: () => setState(() => _isReel = false),
-                    ),
-                    const SizedBox(width: 10),
-                    _ToggleChip(
-                      label: 'Reel',
-                      selected: _isReel,
-                      activeColor: const Color(0xFFFFB44C),
-                      icon: Icons.video_collection_outlined,
-                      onTap: () => setState(() => _isReel = true),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
 
                 // Type toggle
                 Row(
@@ -1412,22 +2775,27 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                       icon: Icons.workspace_premium_outlined,
                       onTap: () => setState(() => _isFree = false),
                     ),
-                    const SizedBox(width: 24),
-                    // Featured
-                    Row(
-                      children: [
-                        Checkbox(
-                          value: _isFeatured,
-                          onChanged: (v) => setState(() => _isFeatured = v!),
-                          activeColor: const Color(0xFFFFB44C),
-                          side: const BorderSide(color: Colors.white38),
-                        ),
-                        const Text(
-                          'Featured',
-                          style: TextStyle(color: Colors.white70, fontSize: 14),
-                        ),
-                      ],
-                    ),
+                    if (!_isReel) ...[
+                      const SizedBox(width: 24),
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: _isFeatured,
+                            onChanged: (v) =>
+                                setState(() => _isFeatured = v ?? false),
+                            activeColor: const Color(0xFFFFB44C),
+                            side: const BorderSide(color: Colors.white38),
+                          ),
+                          const Text(
+                            'Featured',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -1502,37 +2870,7 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
       keyboardType: keyboardType,
       validator: validator,
       style: const TextStyle(color: Colors.white, fontSize: 14),
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: const TextStyle(color: Colors.white24, fontSize: 14),
-        filled: true,
-        fillColor: const Color(0xFF162235),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 10,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFF243247)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFF243247)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFF1F9DCC)),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFFF05454)),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFFF05454)),
-        ),
-        errorStyle: const TextStyle(color: Color(0xFFF05454), fontSize: 11),
-      ),
+      decoration: _adminFieldDecoration(hint),
     );
   }
 
@@ -1541,6 +2879,7 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
     setState(() => _isSubmitting = true);
 
     final durationSecs = int.parse(_durationCtrl.text.trim());
+    final isFeatured = _isReel ? false : _isFeatured;
     bool success;
 
     if (widget.existing != null) {
@@ -1556,8 +2895,7 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
             durationSeconds: durationSecs,
             isFree: _isFree,
             isReel: _isReel,
-            isFeatured: _isFeatured,
-            director: _directorCtrl.text,
+            isFeatured: isFeatured,
           );
     } else {
       success = await ref
@@ -1571,8 +2909,7 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
             durationSeconds: durationSecs,
             isFree: _isFree,
             isReel: _isReel,
-            isFeatured: _isFeatured,
-            director: _directorCtrl.text,
+            isFeatured: isFeatured,
           );
     }
 
@@ -1674,6 +3011,145 @@ class _FormField extends StatelessWidget {
   }
 }
 
+class _AdminImageUploadField extends StatelessWidget {
+  const _AdminImageUploadField({
+    required this.label,
+    required this.controller,
+    required this.hint,
+    required this.isUploading,
+    required this.onUpload,
+    this.validator,
+    this.previewUnavailableText = 'Image preview unavailable',
+  });
+
+  final String label;
+  final TextEditingController controller;
+  final String hint;
+  final bool isUploading;
+  final VoidCallback onUpload;
+  final String? Function(String?)? validator;
+  final String previewUnavailableText;
+
+  @override
+  Widget build(BuildContext context) {
+    return _FormField(
+      label: label,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _adminTextField(controller, hint, validator: validator),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                height: 46,
+                child: OutlinedButton.icon(
+                  onPressed: isUploading ? null : onUpload,
+                  icon: isUploading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.upload_file_outlined),
+                  label: Text(isUploading ? 'Uploading...' : 'Pick Image'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Color(0xFF243247)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Upload to Supabase Storage or paste a public image URL manually.',
+            style: TextStyle(color: Colors.white38, fontSize: 11),
+          ),
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: controller,
+            builder: (context, value, child) {
+              final imageUrl = value.text.trim();
+              if (imageUrl.isEmpty) {
+                return const SizedBox.shrink();
+              }
+
+              return Column(
+                children: [
+                  const SizedBox(height: 12),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: SizedBox(
+                      height: 140,
+                      width: double.infinity,
+                      child: Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          color: const Color(0xFF162235),
+                          alignment: Alignment.center,
+                          child: Text(
+                            previewUnavailableText,
+                            style: const TextStyle(color: Colors.white38),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+mixin _AdminImageUploadStateMixin<T extends StatefulWidget> on State<T> {
+  Future<void> uploadImageToController({
+    required TextEditingController controller,
+    required void Function(bool value) setUploading,
+    required String fieldLabel,
+  }) async {
+    try {
+      setState(() => setUploading(true));
+
+      final publicUrl = await _pickAndUploadAdminImage();
+      if (!mounted) {
+        return;
+      }
+
+      if (publicUrl == null) {
+        setState(() => setUploading(false));
+        return;
+      }
+
+      setState(() {
+        controller.text = publicUrl;
+        setUploading(false);
+      });
+    } catch (error, stackTrace) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() => setUploading(false));
+      _showAdminImageUploadError(
+        context: context,
+        fieldLabel: fieldLabel,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+}
+
 class _ToggleChip extends StatelessWidget {
   final String label;
   final bool selected;
@@ -1728,6 +3204,1292 @@ class _ToggleChip extends StatelessWidget {
       ),
     );
   }
+}
+
+class _SeriesFormDialog extends ConsumerStatefulWidget {
+  const _SeriesFormDialog({this.existing});
+
+  final SeriesModel? existing;
+
+  @override
+  ConsumerState<_SeriesFormDialog> createState() => _SeriesFormDialogState();
+}
+
+class _SeriesFormDialogState extends ConsumerState<_SeriesFormDialog>
+    with _AdminImageUploadStateMixin<_SeriesFormDialog> {
+  final _formKey = GlobalKey<FormState>();
+
+  late final TextEditingController _titleCtrl;
+  late final TextEditingController _descCtrl;
+  late final TextEditingController _posterCtrl;
+  late final TextEditingController _backdropCtrl;
+  late final TextEditingController _trailerCtrl;
+  late final TextEditingController _genreCtrl;
+  late final TextEditingController _taglineCtrl;
+  late final TextEditingController _releaseDateCtrl;
+
+  bool _isFree = true;
+  bool _isFeatured = false;
+  bool _isSubmitting = false;
+  bool _isUploadingPoster = false;
+  bool _isUploadingBackdrop = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.existing;
+    _titleCtrl = TextEditingController(text: existing?.title ?? '');
+    _descCtrl = TextEditingController(text: existing?.description ?? '');
+    _posterCtrl = TextEditingController(text: existing?.posterUrl ?? '');
+    _backdropCtrl = TextEditingController(text: existing?.backdropUrl ?? '');
+    _trailerCtrl = TextEditingController(text: existing?.trailerUrl ?? '');
+    _genreCtrl = TextEditingController(text: existing?.genre ?? 'Drama');
+    _taglineCtrl = TextEditingController(text: existing?.tagline ?? '');
+    _releaseDateCtrl = TextEditingController(
+      text: existing == null
+          ? DateTime.now().toIso8601String().substring(0, 10)
+          : existing.releaseDate.toIso8601String().substring(0, 10),
+    );
+    _isFree = existing != null ? !existing.requiresPremium : false;
+    _isFeatured = existing?.isFeatured ?? false;
+  }
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _descCtrl.dispose();
+    _posterCtrl.dispose();
+    _backdropCtrl.dispose();
+    _trailerCtrl.dispose();
+    _genreCtrl.dispose();
+    _taglineCtrl.dispose();
+    _releaseDateCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEdit = widget.existing != null;
+
+    return Dialog(
+      backgroundColor: const Color(0xFF0D1520),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: SizedBox(
+        width: 640,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(28),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      isEdit ? 'Edit Series' : 'Add New Series',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white54),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Divider(color: Color(0xFF1A2840)),
+                const SizedBox(height: 16),
+                _FormField(
+                  label: 'Title *',
+                  child: _adminTextField(
+                    _titleCtrl,
+                    'Enter series title',
+                    validator: _requiredField,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _FormField(
+                  label: 'Tagline',
+                  child: _adminTextField(
+                    _taglineCtrl,
+                    'Short hook for the series',
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _FormField(
+                  label: 'Description',
+                  child: _adminTextField(
+                    _descCtrl,
+                    'Enter series description',
+                    maxLines: 4,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _FormField(
+                        label: 'Genre',
+                        child: _adminGenreDropdownField(
+                          _genreCtrl,
+                          hint: 'Select genre',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _FormField(
+                        label: 'Release Date (YYYY-MM-DD)',
+                        child: _adminTextField(
+                          _releaseDateCtrl,
+                          '2026-01-18',
+                          validator: _requiredField,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _AdminImageUploadField(
+                  label: 'Poster URL *',
+                  controller: _posterCtrl,
+                  hint: 'https://...poster.jpg',
+                  validator: _requiredField,
+                  isUploading: _isUploadingPoster,
+                  onUpload: () => uploadImageToController(
+                    controller: _posterCtrl,
+                    setUploading: (value) => _isUploadingPoster = value,
+                    fieldLabel: 'Poster',
+                  ),
+                  previewUnavailableText: 'Poster preview unavailable',
+                ),
+                const SizedBox(height: 14),
+                _AdminImageUploadField(
+                  label: 'Backdrop URL',
+                  controller: _backdropCtrl,
+                  hint: 'https://...backdrop.jpg',
+                  isUploading: _isUploadingBackdrop,
+                  onUpload: () => uploadImageToController(
+                    controller: _backdropCtrl,
+                    setUploading: (value) => _isUploadingBackdrop = value,
+                    fieldLabel: 'Backdrop',
+                  ),
+                  previewUnavailableText: 'Backdrop preview unavailable',
+                ),
+                const SizedBox(height: 14),
+                _FormField(
+                  label: 'Trailer URL',
+                  child: _adminTextField(
+                    _trailerCtrl,
+                    'https://...trailer.mp4',
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    _ToggleChip(
+                      label: 'Free Entry',
+                      selected: _isFree,
+                      activeColor: const Color(0xFF21A45D),
+                      icon: Icons.lock_open_outlined,
+                      onTap: () => setState(() => _isFree = true),
+                    ),
+                    const SizedBox(width: 10),
+                    _ToggleChip(
+                      label: 'Premium',
+                      selected: !_isFree,
+                      activeColor: const Color(0xFFF05454),
+                      icon: Icons.workspace_premium_outlined,
+                      onTap: () => setState(() => _isFree = false),
+                    ),
+                    const SizedBox(width: 24),
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: _isFeatured,
+                          onChanged: (value) =>
+                              setState(() => _isFeatured = value ?? false),
+                          activeColor: const Color(0xFFFFB44C),
+                          side: const BorderSide(color: Colors.white38),
+                        ),
+                        const Text(
+                          'Featured',
+                          style: TextStyle(color: Colors.white70, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                const Divider(color: Color(0xFF1A2840)),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: _isSubmitting
+                          ? null
+                          : () => Navigator.of(context).pop(),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(color: Colors.white54),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFF05454),
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: _isSubmitting ? null : _submit,
+                      child: _isSubmitting
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                              ),
+                            )
+                          : Text(isEdit ? 'Save Changes' : 'Add Series'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+    final notifier = ref.read(adminProvider.notifier);
+    final success = widget.existing != null
+        ? await notifier.updateSeries(
+            id: widget.existing!.id,
+            title: _titleCtrl.text,
+            description: _descCtrl.text,
+            posterUrl: _posterCtrl.text,
+            backdropUrl: _backdropCtrl.text,
+            trailerUrl: _trailerCtrl.text,
+            genre: _genreCtrl.text,
+            tagline: _taglineCtrl.text,
+            releaseDate: _releaseDateCtrl.text,
+            isFree: _isFree,
+            isFeatured: _isFeatured,
+          )
+        : await notifier.addSeries(
+            title: _titleCtrl.text,
+            description: _descCtrl.text,
+            posterUrl: _posterCtrl.text,
+            backdropUrl: _backdropCtrl.text,
+            trailerUrl: _trailerCtrl.text,
+            genre: _genreCtrl.text,
+            tagline: _taglineCtrl.text,
+            releaseDate: _releaseDateCtrl.text,
+            isFree: _isFree,
+            isFeatured: _isFeatured,
+          );
+
+    if (mounted) {
+      setState(() => _isSubmitting = false);
+      if (success) {
+        Navigator.of(context).pop();
+      }
+    }
+  }
+}
+
+class _SeriesStructureDialog extends ConsumerStatefulWidget {
+  const _SeriesStructureDialog({required this.series});
+
+  final SeriesModel series;
+
+  @override
+  ConsumerState<_SeriesStructureDialog> createState() =>
+      _SeriesStructureDialogState();
+}
+
+class _SeriesStructureDialogState
+    extends ConsumerState<_SeriesStructureDialog> {
+  List<SeriesSeasonModel> _seasons = const [];
+  List<SeriesEpisodeModel> _episodes = const [];
+  String? _selectedSeasonId;
+  bool _loadingSeasons = true;
+  bool _loadingEpisodes = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadSeasons());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedSeason = _seasons
+        .where((season) => season.id == _selectedSeasonId)
+        .firstOrNull;
+
+    return Dialog(
+      backgroundColor: const Color(0xFF0D1520),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: SizedBox(
+        width: 920,
+        height: 700,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.series.title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Manage seasons and episodes',
+                          style: TextStyle(color: Colors.white54, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  FilledButton.icon(
+                    onPressed: _showAddSeason,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF1F9DCC),
+                      foregroundColor: Colors.white,
+                    ),
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Add Season'),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white54),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Divider(color: Color(0xFF1A2840)),
+              const SizedBox(height: 16),
+              if (_loadingSeasons)
+                const Expanded(
+                  child: Center(
+                    child: CircularProgressIndicator(color: Color(0xFFF05454)),
+                  ),
+                )
+              else ...[
+                const Text(
+                  'Seasons',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: _seasons
+                      .map((season) {
+                        final selected = season.id == _selectedSeasonId;
+                        return Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: selected
+                                ? const Color(
+                                    0xFF1F9DCC,
+                                  ).withValues(alpha: 0.18)
+                                : const Color(0xFF162235),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: selected
+                                  ? const Color(0xFF1F9DCC)
+                                  : const Color(0xFF243247),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              InkWell(
+                                onTap: () => _selectSeason(season.id),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                  ),
+                                  child: Text(
+                                    'S${season.seasonNumber} • ${season.episodeCount} eps',
+                                    style: TextStyle(
+                                      color: selected
+                                          ? Colors.white
+                                          : Colors.white70,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: () => _showEditSeason(season),
+                                icon: const Icon(
+                                  Icons.edit_outlined,
+                                  size: 16,
+                                  color: Colors.white54,
+                                ),
+                                constraints: const BoxConstraints(
+                                  minWidth: 28,
+                                  minHeight: 28,
+                                ),
+                                padding: EdgeInsets.zero,
+                              ),
+                              IconButton(
+                                onPressed: () => _deleteSeason(season),
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  size: 16,
+                                  color: Color(0xFFF05454),
+                                ),
+                                constraints: const BoxConstraints(
+                                  minWidth: 28,
+                                  minHeight: 28,
+                                ),
+                                padding: EdgeInsets.zero,
+                              ),
+                            ],
+                          ),
+                        );
+                      })
+                      .toList(growable: false),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Text(
+                      selectedSeason == null
+                          ? 'Episodes'
+                          : 'Episodes for Season ${selectedSeason.seasonNumber}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const Spacer(),
+                    FilledButton.icon(
+                      onPressed: selectedSeason == null
+                          ? null
+                          : () => _showAddEpisode(selectedSeason),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFFF05454),
+                        foregroundColor: Colors.white,
+                      ),
+                      icon: const Icon(Icons.add_rounded),
+                      label: const Text('Add Episode'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: _loadingEpisodes
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                            color: Color(0xFFF05454),
+                          ),
+                        )
+                      : selectedSeason == null
+                      ? const Center(
+                          child: Text(
+                            'Add a season to start managing episodes',
+                            style: TextStyle(color: Colors.white38),
+                          ),
+                        )
+                      : _episodes.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'No episodes in this season yet',
+                            style: TextStyle(color: Colors.white38),
+                          ),
+                        )
+                      : ListView.separated(
+                          itemCount: _episodes.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 10),
+                          itemBuilder: (context, index) {
+                            final episode = _episodes[index];
+                            return Container(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF162235),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: const Color(0xFF243247),
+                                ),
+                              ),
+                              child: ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: const Color(0xFF0D1520),
+                                  child: Text(
+                                    episode.episodeNumber.toString(),
+                                    style: const TextStyle(color: Colors.white),
+                                  ),
+                                ),
+                                title: Text(
+                                  episode.title,
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                                subtitle: Text(
+                                  '${episode.duration ~/ 60} min • ${episode.requiresPremium ? 'Premium' : 'Free'}',
+                                  style: const TextStyle(color: Colors.white54),
+                                ),
+                                trailing: Wrap(
+                                  spacing: 8,
+                                  children: [
+                                    IconButton(
+                                      onPressed: () => _showEditEpisode(
+                                        selectedSeason,
+                                        episode,
+                                      ),
+                                      icon: const Icon(
+                                        Icons.edit_outlined,
+                                        size: 18,
+                                        color: Color(0xFF1F9DCC),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      onPressed: () => _deleteEpisode(episode),
+                                      icon: const Icon(
+                                        Icons.delete_outline,
+                                        size: 18,
+                                        color: Color(0xFFF05454),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _loadSeasons() async {
+    setState(() => _loadingSeasons = true);
+    final seasons = await ref
+        .read(adminProvider.notifier)
+        .loadSeriesSeasons(widget.series.id);
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _seasons = seasons;
+      _loadingSeasons = false;
+      _selectedSeasonId = seasons.isEmpty
+          ? null
+          : (_selectedSeasonId ?? seasons.first.id);
+    });
+
+    if (_selectedSeasonId != null) {
+      await _loadEpisodes(_selectedSeasonId!);
+    }
+  }
+
+  Future<void> _loadEpisodes(String seasonId) async {
+    setState(() => _loadingEpisodes = true);
+    final episodes = await ref
+        .read(adminProvider.notifier)
+        .loadSeasonEpisodes(seasonId);
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _episodes = episodes;
+      _loadingEpisodes = false;
+    });
+  }
+
+  Future<void> _selectSeason(String seasonId) async {
+    setState(() {
+      _selectedSeasonId = seasonId;
+    });
+    await _loadEpisodes(seasonId);
+  }
+
+  Future<void> _showAddSeason() async {
+    final success = await showDialog<bool>(
+      context: context,
+      builder: (_) => _SeasonFormDialog(seriesId: widget.series.id),
+    );
+    if (success == true) {
+      await _loadSeasons();
+    }
+  }
+
+  Future<void> _showEditSeason(SeriesSeasonModel season) async {
+    final success = await showDialog<bool>(
+      context: context,
+      builder: (_) =>
+          _SeasonFormDialog(seriesId: widget.series.id, existing: season),
+    );
+    if (success == true) {
+      await _loadSeasons();
+    }
+  }
+
+  Future<void> _deleteSeason(SeriesSeasonModel season) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF0D1520),
+        title: const Text(
+          'Delete Season',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          'Delete Season ${season.seasonNumber} and all its episodes?',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white54),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFF05454),
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+
+    final success = await ref
+        .read(adminProvider.notifier)
+        .deleteSeason(season.id);
+    if (success) {
+      await _loadSeasons();
+    }
+  }
+
+  Future<void> _showAddEpisode(SeriesSeasonModel? season) async {
+    if (season == null) {
+      return;
+    }
+    final success = await showDialog<bool>(
+      context: context,
+      builder: (_) =>
+          _EpisodeFormDialog(seriesId: widget.series.id, season: season),
+    );
+    if (success == true) {
+      await _loadSeasons();
+      await _loadEpisodes(season.id);
+    }
+  }
+
+  Future<void> _showEditEpisode(
+    SeriesSeasonModel? season,
+    SeriesEpisodeModel episode,
+  ) async {
+    if (season == null) {
+      return;
+    }
+    final success = await showDialog<bool>(
+      context: context,
+      builder: (_) => _EpisodeFormDialog(
+        seriesId: widget.series.id,
+        season: season,
+        existing: episode,
+      ),
+    );
+    if (success == true) {
+      await _loadSeasons();
+      await _loadEpisodes(season.id);
+    }
+  }
+
+  Future<void> _deleteEpisode(SeriesEpisodeModel episode) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF0D1520),
+        title: const Text(
+          'Delete Episode',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          'Delete "${episode.title}"?',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white54),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFF05454),
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+
+    final success = await ref
+        .read(adminProvider.notifier)
+        .deleteEpisode(episode.id);
+    if (success && _selectedSeasonId != null) {
+      await _loadSeasons();
+      await _loadEpisodes(_selectedSeasonId!);
+    }
+  }
+}
+
+class _SeasonFormDialog extends ConsumerStatefulWidget {
+  const _SeasonFormDialog({required this.seriesId, this.existing});
+
+  final String seriesId;
+  final SeriesSeasonModel? existing;
+
+  @override
+  ConsumerState<_SeasonFormDialog> createState() => _SeasonFormDialogState();
+}
+
+class _SeasonFormDialogState extends ConsumerState<_SeasonFormDialog>
+    with _AdminImageUploadStateMixin<_SeasonFormDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _seasonNumberCtrl;
+  late final TextEditingController _titleCtrl;
+  late final TextEditingController _descriptionCtrl;
+  late final TextEditingController _posterCtrl;
+  late final TextEditingController _releaseDateCtrl;
+  bool _isSubmitting = false;
+  bool _isUploadingPoster = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.existing;
+    _seasonNumberCtrl = TextEditingController(
+      text: existing?.seasonNumber.toString() ?? '1',
+    );
+    _titleCtrl = TextEditingController(text: existing?.title ?? '');
+    _descriptionCtrl = TextEditingController(text: existing?.description ?? '');
+    _posterCtrl = TextEditingController(text: existing?.posterUrl ?? '');
+    _releaseDateCtrl = TextEditingController(
+      text:
+          existing?.releaseDate?.toIso8601String().substring(0, 10) ??
+          DateTime.now().toIso8601String().substring(0, 10),
+    );
+  }
+
+  @override
+  void dispose() {
+    _seasonNumberCtrl.dispose();
+    _titleCtrl.dispose();
+    _descriptionCtrl.dispose();
+    _posterCtrl.dispose();
+    _releaseDateCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: const Color(0xFF0D1520),
+      child: SizedBox(
+        width: 560,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  widget.existing == null ? 'Add Season' : 'Edit Season',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _FormField(
+                  label: 'Season Number *',
+                  child: _adminTextField(
+                    _seasonNumberCtrl,
+                    '1',
+                    keyboardType: TextInputType.number,
+                    validator: _positiveNumberField,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _FormField(
+                  label: 'Title',
+                  child: _adminTextField(_titleCtrl, 'Season 1'),
+                ),
+                const SizedBox(height: 14),
+                _FormField(
+                  label: 'Description',
+                  child: _adminTextField(
+                    _descriptionCtrl,
+                    'Season description',
+                    maxLines: 3,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _AdminImageUploadField(
+                  label: 'Poster URL',
+                  controller: _posterCtrl,
+                  hint: 'https://...season.jpg',
+                  isUploading: _isUploadingPoster,
+                  onUpload: () => uploadImageToController(
+                    controller: _posterCtrl,
+                    setUploading: (value) => _isUploadingPoster = value,
+                    fieldLabel: 'Season poster',
+                  ),
+                  previewUnavailableText: 'Season poster preview unavailable',
+                ),
+                const SizedBox(height: 14),
+                _FormField(
+                  label: 'Release Date *',
+                  child: _adminTextField(
+                    _releaseDateCtrl,
+                    '2026-01-18',
+                    validator: _requiredField,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: _isSubmitting
+                          ? null
+                          : () => Navigator.of(context).pop(false),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(color: Colors.white54),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFF05454),
+                      ),
+                      onPressed: _isSubmitting ? null : _submit,
+                      child: _isSubmitting
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                              ),
+                            )
+                          : Text(
+                              widget.existing == null
+                                  ? 'Add Season'
+                                  : 'Save Season',
+                            ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+    final notifier = ref.read(adminProvider.notifier);
+    final success = widget.existing == null
+        ? await notifier.addSeason(
+            seriesId: widget.seriesId,
+            seasonNumber: int.parse(_seasonNumberCtrl.text.trim()),
+            title: _titleCtrl.text,
+            description: _descriptionCtrl.text,
+            posterUrl: _posterCtrl.text,
+            releaseDate: _releaseDateCtrl.text,
+          )
+        : await notifier.updateSeason(
+            id: widget.existing!.id,
+            seasonNumber: int.parse(_seasonNumberCtrl.text.trim()),
+            title: _titleCtrl.text,
+            description: _descriptionCtrl.text,
+            posterUrl: _posterCtrl.text,
+            releaseDate: _releaseDateCtrl.text,
+          );
+
+    if (mounted) {
+      setState(() => _isSubmitting = false);
+      Navigator.of(context).pop(success);
+    }
+  }
+}
+
+class _EpisodeFormDialog extends ConsumerStatefulWidget {
+  const _EpisodeFormDialog({
+    required this.seriesId,
+    required this.season,
+    this.existing,
+  });
+
+  final String seriesId;
+  final SeriesSeasonModel season;
+  final SeriesEpisodeModel? existing;
+
+  @override
+  ConsumerState<_EpisodeFormDialog> createState() => _EpisodeFormDialogState();
+}
+
+class _EpisodeFormDialogState extends ConsumerState<_EpisodeFormDialog>
+    with _AdminImageUploadStateMixin<_EpisodeFormDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _episodeNumberCtrl;
+  late final TextEditingController _titleCtrl;
+  late final TextEditingController _descriptionCtrl;
+  late final TextEditingController _thumbnailCtrl;
+  late final TextEditingController _videoUrlCtrl;
+  late final TextEditingController _durationCtrl;
+  late final TextEditingController _releaseDateCtrl;
+  bool _isFree = false;
+  bool _isSubmitting = false;
+  bool _isUploadingThumbnail = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.existing;
+    _episodeNumberCtrl = TextEditingController(
+      text: existing?.episodeNumber.toString() ?? '1',
+    );
+    _titleCtrl = TextEditingController(text: existing?.title ?? '');
+    _descriptionCtrl = TextEditingController(text: existing?.description ?? '');
+    _thumbnailCtrl = TextEditingController(text: existing?.thumbnailUrl ?? '');
+    _videoUrlCtrl = TextEditingController(text: existing?.videoUrl ?? '');
+    _durationCtrl = TextEditingController(
+      text: existing?.duration.toString() ?? '',
+    );
+    _releaseDateCtrl = TextEditingController(
+      text:
+          existing?.releaseDate?.toIso8601String().substring(0, 10) ??
+          DateTime.now().toIso8601String().substring(0, 10),
+    );
+    _isFree = existing != null ? !existing.requiresPremium : false;
+  }
+
+  @override
+  void dispose() {
+    _episodeNumberCtrl.dispose();
+    _titleCtrl.dispose();
+    _descriptionCtrl.dispose();
+    _thumbnailCtrl.dispose();
+    _videoUrlCtrl.dispose();
+    _durationCtrl.dispose();
+    _releaseDateCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: const Color(0xFF0D1520),
+      child: SizedBox(
+        width: 600,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  widget.existing == null
+                      ? 'Add Episode to Season ${widget.season.seasonNumber}'
+                      : 'Edit Episode',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _FormField(
+                        label: 'Episode Number *',
+                        child: _adminTextField(
+                          _episodeNumberCtrl,
+                          '1',
+                          keyboardType: TextInputType.number,
+                          validator: _positiveNumberField,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _FormField(
+                        label: 'Duration (seconds) *',
+                        child: _adminTextField(
+                          _durationCtrl,
+                          '2700',
+                          keyboardType: TextInputType.number,
+                          validator: _positiveNumberField,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _FormField(
+                  label: 'Title *',
+                  child: _adminTextField(
+                    _titleCtrl,
+                    'Episode title',
+                    validator: _requiredField,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _FormField(
+                  label: 'Description',
+                  child: _adminTextField(
+                    _descriptionCtrl,
+                    'Episode description',
+                    maxLines: 3,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _AdminImageUploadField(
+                  label: 'Thumbnail URL *',
+                  controller: _thumbnailCtrl,
+                  hint: 'https://...episode.jpg',
+                  validator: _requiredField,
+                  isUploading: _isUploadingThumbnail,
+                  onUpload: () => uploadImageToController(
+                    controller: _thumbnailCtrl,
+                    setUploading: (value) => _isUploadingThumbnail = value,
+                    fieldLabel: 'Episode thumbnail',
+                  ),
+                  previewUnavailableText:
+                      'Episode thumbnail preview unavailable',
+                ),
+                const SizedBox(height: 14),
+                _FormField(
+                  label: 'Video URL *',
+                  child: _adminTextField(
+                    _videoUrlCtrl,
+                    'https://...episode.mp4',
+                    validator: _requiredField,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _FormField(
+                  label: 'Release Date *',
+                  child: _adminTextField(
+                    _releaseDateCtrl,
+                    '2026-01-18',
+                    validator: _requiredField,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    _ToggleChip(
+                      label: 'Free',
+                      selected: _isFree,
+                      activeColor: const Color(0xFF21A45D),
+                      icon: Icons.lock_open_outlined,
+                      onTap: () => setState(() => _isFree = true),
+                    ),
+                    const SizedBox(width: 10),
+                    _ToggleChip(
+                      label: 'Premium',
+                      selected: !_isFree,
+                      activeColor: const Color(0xFFF05454),
+                      icon: Icons.workspace_premium_outlined,
+                      onTap: () => setState(() => _isFree = false),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: _isSubmitting
+                          ? null
+                          : () => Navigator.of(context).pop(false),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(color: Colors.white54),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFF05454),
+                      ),
+                      onPressed: _isSubmitting ? null : _submit,
+                      child: _isSubmitting
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                              ),
+                            )
+                          : Text(
+                              widget.existing == null
+                                  ? 'Add Episode'
+                                  : 'Save Episode',
+                            ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+    final notifier = ref.read(adminProvider.notifier);
+    final success = widget.existing == null
+        ? await notifier.addEpisode(
+            seriesId: widget.seriesId,
+            seasonId: widget.season.id,
+            episodeNumber: int.parse(_episodeNumberCtrl.text.trim()),
+            title: _titleCtrl.text,
+            description: _descriptionCtrl.text,
+            thumbnailUrl: _thumbnailCtrl.text,
+            videoUrl: _videoUrlCtrl.text,
+            durationSeconds: int.parse(_durationCtrl.text.trim()),
+            isFree: _isFree,
+            releaseDate: _releaseDateCtrl.text,
+          )
+        : await notifier.updateEpisode(
+            id: widget.existing!.id,
+            episodeNumber: int.parse(_episodeNumberCtrl.text.trim()),
+            title: _titleCtrl.text,
+            description: _descriptionCtrl.text,
+            thumbnailUrl: _thumbnailCtrl.text,
+            videoUrl: _videoUrlCtrl.text,
+            durationSeconds: int.parse(_durationCtrl.text.trim()),
+            isFree: _isFree,
+            releaseDate: _releaseDateCtrl.text,
+          );
+
+    if (mounted) {
+      setState(() => _isSubmitting = false);
+      Navigator.of(context).pop(success);
+    }
+  }
+}
+
+Widget _adminTextField(
+  TextEditingController ctrl,
+  String hint, {
+  int maxLines = 1,
+  TextInputType? keyboardType,
+  String? Function(String?)? validator,
+}) {
+  return TextFormField(
+    controller: ctrl,
+    maxLines: maxLines,
+    keyboardType: keyboardType,
+    validator: validator,
+    style: const TextStyle(color: Colors.white, fontSize: 14),
+    decoration: _adminFieldDecoration(hint),
+  );
+}
+
+String? _requiredField(String? value) {
+  if (value == null || value.trim().isEmpty) {
+    return 'Required';
+  }
+  return null;
+}
+
+String? _positiveNumberField(String? value) {
+  if (value == null || value.trim().isEmpty) {
+    return 'Required';
+  }
+  final parsedValue = int.tryParse(value.trim());
+  if (parsedValue == null) {
+    return 'Must be a number';
+  }
+  if (parsedValue <= 0) {
+    return 'Must be greater than 0';
+  }
+  return null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
