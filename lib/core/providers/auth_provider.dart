@@ -3,12 +3,16 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:video/core/constants/app_config.dart';
 import 'package:video/core/models/user_model.dart';
 import 'package:video/core/providers/service_providers.dart';
+import 'package:video/core/services/app_settings_service.dart';
+import 'package:video/core/services/setup_persistence_service.dart';
 
 // Auth State Notifier
 class AuthState {
   final bool isLoading;
+  final bool hasInitialized;
   final bool isAuthenticated;
   final UserModel? user;
   final String? accessToken;
@@ -17,6 +21,7 @@ class AuthState {
 
   const AuthState({
     this.isLoading = false,
+    this.hasInitialized = false,
     this.isAuthenticated = false,
     this.user,
     this.accessToken,
@@ -26,6 +31,7 @@ class AuthState {
 
   AuthState copyWith({
     bool? isLoading,
+    bool? hasInitialized,
     bool? isAuthenticated,
     UserModel? user,
     String? accessToken,
@@ -34,6 +40,7 @@ class AuthState {
   }) {
     return AuthState(
       isLoading: isLoading ?? this.isLoading,
+      hasInitialized: hasInitialized ?? this.hasInitialized,
       isAuthenticated: isAuthenticated ?? this.isAuthenticated,
       user: user ?? this.user,
       accessToken: accessToken ?? this.accessToken,
@@ -45,13 +52,15 @@ class AuthState {
 
 class AuthStateNotifier extends StateNotifier<AuthState> {
   AuthStateNotifier(this.ref) : super(const AuthState()) {
+    if (!AppConstants.isConfigured) return;
+
     _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((
       data,
     ) {
       final event = data.event;
 
       if (event == AuthChangeEvent.signedOut) {
-        state = const AuthState();
+        state = const AuthState(hasInitialized: true);
         ref.read(httpClientProvider).removeAuthToken();
         return;
       }
@@ -63,13 +72,53 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
   }
 
   final Ref ref;
-  late final StreamSubscription _authSubscription;
+  StreamSubscription? _authSubscription;
+
+  Future<void> _finalizePendingSetupAdmin(User supabaseUser) async {
+    final pendingAdminEmail = await SetupPersistenceService.instance
+        .getPendingAdminEmail();
+    final userEmail = supabaseUser.email?.trim().toLowerCase();
+
+    if (pendingAdminEmail == null || userEmail == null) {
+      return;
+    }
+
+    if (pendingAdminEmail != userEmail) {
+      return;
+    }
+
+    try {
+      await Supabase.instance.client.rpc('promote_first_admin');
+    } catch (e) {
+      debugPrint('Pending setup admin promotion skipped: $e');
+    }
+
+    try {
+      final profile = await Supabase.instance.client
+          .from('user_profiles')
+          .select('is_admin')
+          .eq('id', supabaseUser.id)
+          .maybeSingle();
+
+      final isAdmin = profile?['is_admin'] as bool? ?? false;
+      if (!isAdmin) {
+        return;
+      }
+
+      await ref.read(appSettingsServiceProvider).markSetupCompleted();
+      await SetupPersistenceService.instance.markSetupCompleted();
+    } catch (e) {
+      debugPrint('Pending setup completion skipped: $e');
+    }
+  }
 
   Future<UserModel> _buildUserModel({
     required User supabaseUser,
     required String fallbackEmail,
     required String fallbackUsername,
   }) async {
+    await _finalizePendingSetupAdmin(supabaseUser);
+
     bool isAdmin = false;
     bool isPremium = false;
     DateTime? premiumExpiresAt;
@@ -160,15 +209,24 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
 
       state = state.copyWith(
         isLoading: false,
+        hasInitialized: true,
         isAuthenticated: true,
         user: userModel,
         accessToken: session.accessToken,
         refreshToken: session.refreshToken,
       );
     } on AuthException catch (e) {
-      state = state.copyWith(isLoading: false, errorMessage: e.message);
+      state = state.copyWith(
+        isLoading: false,
+        hasInitialized: true,
+        errorMessage: e.message,
+      );
     } catch (e) {
-      state = state.copyWith(isLoading: false, errorMessage: e.toString());
+      state = state.copyWith(
+        isLoading: false,
+        hasInitialized: true,
+        errorMessage: e.toString(),
+      );
     }
   }
 
@@ -209,6 +267,7 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
 
         state = state.copyWith(
           isLoading: false,
+          hasInitialized: true,
           isAuthenticated: true,
           user: userModel,
           accessToken: session.accessToken,
@@ -218,13 +277,22 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
         // Email confirmation required
         state = state.copyWith(
           isLoading: false,
+          hasInitialized: true,
           errorMessage: 'Check your email to confirm your account.',
         );
       }
     } on AuthException catch (e) {
-      state = state.copyWith(isLoading: false, errorMessage: e.message);
+      state = state.copyWith(
+        isLoading: false,
+        hasInitialized: true,
+        errorMessage: e.message,
+      );
     } catch (e) {
-      state = state.copyWith(isLoading: false, errorMessage: e.toString());
+      state = state.copyWith(
+        isLoading: false,
+        hasInitialized: true,
+        errorMessage: e.toString(),
+      );
     }
   }
 
@@ -244,14 +312,23 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
         );
 
         state = state.copyWith(
+          hasInitialized: true,
           isAuthenticated: true,
           user: userModel,
           accessToken: currentSession.accessToken,
           refreshToken: currentSession.refreshToken,
         );
+      } else {
+        state = state.copyWith(
+          hasInitialized: true,
+          isAuthenticated: false,
+          user: null,
+          accessToken: null,
+          refreshToken: null,
+        );
       }
     } catch (e) {
-      state = state.copyWith(isAuthenticated: false);
+      state = state.copyWith(hasInitialized: true, isAuthenticated: false);
     }
   }
 
@@ -263,13 +340,13 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
       await ref.read(secureStorageProvider).deleteAccessToken();
       await ref.read(secureStorageProvider).deleteRefreshToken();
       ref.read(httpClientProvider).removeAuthToken();
-      state = const AuthState();
+      state = const AuthState(hasInitialized: true);
     }
   }
 
   @override
   void dispose() {
-    _authSubscription.cancel();
+    _authSubscription?.cancel();
     super.dispose();
   }
 }

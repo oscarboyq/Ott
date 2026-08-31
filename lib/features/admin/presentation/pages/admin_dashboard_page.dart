@@ -13,6 +13,7 @@ import 'package:video/core/models/subscription_plan_model.dart';
 import 'package:video/core/models/video_model.dart';
 import 'package:video/core/providers/admin_provider.dart';
 import 'package:video/core/providers/auth_provider.dart';
+import 'package:video/core/services/app_settings_service.dart';
 import 'package:video/core/utils/image_picker_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -266,6 +267,8 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
                       ? _SeriesSection(adminState: adminState)
                       : _section == _AdminSection.subscriptions
                       ? _SubscriptionsSection(adminState: adminState)
+                      : _section == _AdminSection.settings
+                      ? const _SettingsSection()
                       : _UsersSection(),
                 ),
               ],
@@ -281,7 +284,7 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
 // Section enum
 // ─────────────────────────────────────────────────────────────────────────────
 
-enum _AdminSection { videos, series, subscriptions, users }
+enum _AdminSection { videos, series, subscriptions, users, settings }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SIDEBAR
@@ -379,6 +382,12 @@ class _Sidebar extends StatelessWidget {
             label: 'Users',
             selected: selected == _AdminSection.users,
             onTap: () => onSelect(_AdminSection.users),
+          ),
+          _NavItem(
+            icon: Icons.settings_outlined,
+            label: 'Settings',
+            selected: selected == _AdminSection.settings,
+            onTap: () => onSelect(_AdminSection.settings),
           ),
 
           const Spacer(),
@@ -518,6 +527,7 @@ class _TopBar extends StatelessWidget {
       _AdminSection.series => 'Series Management',
       _AdminSection.subscriptions => 'Subscription Plans',
       _AdminSection.users => 'User Management',
+      _AdminSection.settings => 'Platform Settings',
     };
     return Container(
       height: 64,
@@ -4686,4 +4696,405 @@ class _UsersSectionState extends ConsumerState<_UsersSection> {
       ),
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SETTINGS SECTION (API Keys & Platform Config)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _SettingsSection extends ConsumerStatefulWidget {
+  const _SettingsSection();
+
+  @override
+  ConsumerState<_SettingsSection> createState() => _SettingsSectionState();
+}
+
+class _SettingsSectionState extends ConsumerState<_SettingsSection> {
+  final _controllers = <String, TextEditingController>{};
+  bool _loading = true;
+  bool _saving = false;
+  String? _message;
+
+  static const _settingGroups = [
+    _SettingGroup(
+      title: 'Bunny CDN (Video Hosting)',
+      icon: Icons.cloud_outlined,
+      description:
+          'Connect your Bunny.net Stream library to serve and manage video files.',
+      keys: [
+        _SettingField(
+          key: 'bunny_cdn_api_key',
+          label: 'API Key',
+          hint: 'Your Bunny.net API key',
+          isSecret: true,
+        ),
+        _SettingField(
+          key: 'bunny_cdn_library_id',
+          label: 'Library ID',
+          hint: 'e.g. 123456',
+        ),
+        _SettingField(
+          key: 'bunny_cdn_pull_zone',
+          label: 'Pull Zone Hostname',
+          hint: 'e.g. vz-abc123.b-cdn.net',
+        ),
+      ],
+    ),
+    _SettingGroup(
+      title: 'NOWPayments (Crypto Payments)',
+      icon: Icons.payment_outlined,
+      description: 'Configure crypto payment processing for subscriptions.',
+      keys: [
+        _SettingField(
+          key: 'nowpayments_api_key',
+          label: 'API Key',
+          hint: 'Your NOWPayments API key',
+          isSecret: true,
+        ),
+        _SettingField(
+          key: 'nowpayments_ipn_secret',
+          label: 'IPN Secret',
+          hint: 'Webhook verification secret',
+          isSecret: true,
+        ),
+        _SettingField(
+          key: 'nowpayments_pay_currency',
+          label: 'Default Pay Currency',
+          hint: 'e.g. usdtbsc',
+        ),
+      ],
+    ),
+    _SettingGroup(
+      title: 'Platform',
+      icon: Icons.tv_outlined,
+      description: 'General platform settings.',
+      keys: [
+        _SettingField(
+          key: 'app_name',
+          label: 'App Name',
+          hint: 'e.g. ReelHouse',
+        ),
+      ],
+    ),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  @override
+  void dispose() {
+    for (final c in _controllers.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _loadSettings() async {
+    setState(() => _loading = true);
+    try {
+      final settings = await ref.read(appSettingsServiceProvider).getAll();
+      for (final group in _settingGroups) {
+        for (final field in group.keys) {
+          _controllers[field.key] = TextEditingController(
+            text: settings[field.key] ?? '',
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to load settings: $e');
+    }
+    setState(() => _loading = false);
+  }
+
+  Future<void> _saveSettings() async {
+    setState(() {
+      _saving = true;
+      _message = null;
+    });
+    try {
+      final service = ref.read(appSettingsServiceProvider);
+      final updates = <String, String>{};
+      for (final group in _settingGroups) {
+        for (final field in group.keys) {
+          updates[field.key] = _controllers[field.key]?.text ?? '';
+        }
+      }
+      await service.setAll(updates);
+      setState(() {
+        _saving = false;
+        _message = 'Settings saved successfully!';
+      });
+    } catch (e) {
+      setState(() {
+        _saving = false;
+        _message = 'Error saving: $e';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFFF05454)),
+      );
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          const Text(
+            'Configure your platform integrations below. '
+            'Secret values are stored in your database and are only visible to admins.',
+            style: TextStyle(color: Colors.white60, fontSize: 13),
+          ),
+          const SizedBox(height: 24),
+
+          // Setting groups
+          for (final group in _settingGroups) ...[
+            _buildGroup(group),
+            const SizedBox(height: 20),
+          ],
+
+          // Save button
+          Row(
+            children: [
+              ElevatedButton.icon(
+                onPressed: _saving ? null : _saveSettings,
+                icon: _saving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.save_rounded, size: 18),
+                label: Text(_saving ? 'Saving...' : 'Save All Settings'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFF05454),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 14,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              if (_message != null)
+                Expanded(
+                  child: Text(
+                    _message!,
+                    style: TextStyle(
+                      color: _message!.startsWith('Error')
+                          ? Colors.red
+                          : const Color(0xFF4CAF50),
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 40),
+
+          // Supabase info box
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A2332),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFF2A3A4E)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.white38, size: 18),
+                    SizedBox(width: 8),
+                    Text(
+                      'Supabase Edge Function Secrets',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'For NowPayments webhooks to work, you also need to set these '
+                  'secrets in Supabase Dashboard → Edge Functions → Manage Secrets:',
+                  style: TextStyle(color: Colors.white38, fontSize: 12),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0D1520),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const SelectableText(
+                    'NOWPAYMENTS_API_KEY=<your key>\n'
+                    'NOWPAYMENTS_IPN_SECRET=<your secret>\n'
+                    'NOWPAYMENTS_DEFAULT_PAY_CURRENCY=usdtbsc',
+                    style: TextStyle(
+                      color: Color(0xFF3ECF8E),
+                      fontSize: 12,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGroup(_SettingGroup group) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111827),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF1F2937)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(group.icon, color: const Color(0xFFF05454), size: 20),
+              const SizedBox(width: 10),
+              Text(
+                group.title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            group.description,
+            style: const TextStyle(color: Colors.white38, fontSize: 12),
+          ),
+          const SizedBox(height: 16),
+          for (final field in group.keys) ...[
+            _buildField(field),
+            if (field != group.keys.last) const SizedBox(height: 12),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildField(_SettingField field) {
+    final controller = _controllers[field.key];
+    if (controller == null) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              field.label,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (field.isSecret) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  'SECRET',
+                  style: TextStyle(
+                    color: Colors.amber,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          obscureText: field.isSecret,
+          style: const TextStyle(color: Colors.white, fontSize: 14),
+          decoration: InputDecoration(
+            hintText: field.hint,
+            hintStyle: const TextStyle(color: Colors.white24),
+            filled: true,
+            fillColor: const Color(0xFF1A2332),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFF2A3A4E)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFF2A3A4E)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFFF05454)),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 12,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SettingGroup {
+  final String title;
+  final IconData icon;
+  final String description;
+  final List<_SettingField> keys;
+  const _SettingGroup({
+    required this.title,
+    required this.icon,
+    required this.description,
+    required this.keys,
+  });
+}
+
+class _SettingField {
+  final String key;
+  final String label;
+  final String hint;
+  final bool isSecret;
+  const _SettingField({
+    required this.key,
+    required this.label,
+    this.hint = '',
+    this.isSecret = false,
+  });
 }

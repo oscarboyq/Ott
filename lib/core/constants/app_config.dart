@@ -2,17 +2,33 @@ class AppConstants {
   // ============================================================
   // SUPABASE CONFIGURATION (Primary Backend)
   // ============================================================
-  static const String supabaseUrl = 'https://mornbhixlbbebaoobsng.supabase.co';
-  static const String supabaseAnonKey =
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1vcm5iaGl4bGJiZWJhb29ic25nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNTUyODEsImV4cCI6MjA5MTczMTI4MX0.Dzq7q8Kvb5fU6iuCRrHzEoDxVtfqXDnbGYcvQ1HmjIE';
-  // Keep this secret! Only use in backend
-  // static const String supabaseServiceRoleKey = 'YOUR_SERVICE_ROLE_KEY';
+  // No defaults — the deployer must set these in web/config.js
+  // or the app will show the Setup Wizard.
+  static const String _defaultSupabaseUrl = '';
+  static const String _defaultSupabaseAnonKey = '';
+
+  /// Populated in main() from web/config.js, localStorage, or Setup Wizard.
+  static String supabaseUrl = '';
+  static String supabaseAnonKey = '';
+
+  /// True when Supabase credentials have been provided.
+  static bool get isConfigured =>
+      supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
+
+  /// Call in main() and again from Setup Wizard when user enters credentials.
+  static void loadConfig({String? webUrl, String? webAnonKey}) {
+    supabaseUrl = (webUrl != null && webUrl.isNotEmpty)
+        ? webUrl
+        : _defaultSupabaseUrl;
+    supabaseAnonKey = (webAnonKey != null && webAnonKey.isNotEmpty)
+        ? webAnonKey
+        : _defaultSupabaseAnonKey;
+  }
 
   // ============================================================
   // API Configuration
   // ============================================================
-  static const String baseUrl =
-      'https://mornbhixlbbebaoobsng.supabase.co/rest/v1';
+  static String get baseUrl => '$supabaseUrl/rest/v1';
   static const String apiV1 = '/rest/v1';
   static const Duration connectTimeout = Duration(seconds: 30);
   static const Duration receiveTimeout = Duration(seconds: 30);

@@ -22,29 +22,18 @@ BEGIN
 END $$;
 
 CREATE OR REPLACE FUNCTION refresh_video_rating_stats(target_video_id UUID)
-RETURNS VOID AS $$
-DECLARE
-  average_rating DOUBLE PRECISION;
-  total_ratings INTEGER;
+RETURNS VOID AS $fn$
 BEGIN
-  SELECT
-    COALESCE(ROUND(AVG(rating)::numeric, 1)::double precision, 0),
-    COUNT(*)::integer
-  INTO average_rating, total_ratings
-  FROM video_ratings
-  WHERE video_id = target_video_id;
-
-  UPDATE videos
-  SET
-    rating = average_rating,
-    rating_count = total_ratings,
+  UPDATE videos SET
+    rating = COALESCE((SELECT ROUND(AVG(rating)::numeric, 1)::double precision FROM video_ratings WHERE video_id = target_video_id), 0),
+    rating_count = COALESCE((SELECT COUNT(*)::integer FROM video_ratings WHERE video_id = target_video_id), 0),
     updated_at = NOW()
   WHERE id = target_video_id;
 END;
-$$ LANGUAGE plpgsql;
+$fn$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION sync_video_rating_stats_trigger()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER AS $fn$
 BEGIN
   PERFORM refresh_video_rating_stats(COALESCE(NEW.video_id, OLD.video_id));
   RETURN COALESCE(NEW, OLD);
