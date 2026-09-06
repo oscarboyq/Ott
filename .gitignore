@@ -33,7 +33,6 @@ migrate_working_dir/
 /node_modules/
 /.vercel/
 .env*.local
-/config/supabase.json
 /build/
 /coverage/
 
