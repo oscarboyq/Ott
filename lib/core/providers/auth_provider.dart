@@ -6,8 +6,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:video/core/constants/app_config.dart';
 import 'package:video/core/models/user_model.dart';
 import 'package:video/core/providers/service_providers.dart';
-import 'package:video/core/services/app_settings_service.dart';
-import 'package:video/core/services/setup_persistence_service.dart';
 
 // Auth State Notifier
 class AuthState {
@@ -74,51 +72,11 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
   final Ref ref;
   StreamSubscription? _authSubscription;
 
-  Future<void> _finalizePendingSetupAdmin(User supabaseUser) async {
-    final pendingAdminEmail = await SetupPersistenceService.instance
-        .getPendingAdminEmail();
-    final userEmail = supabaseUser.email?.trim().toLowerCase();
-
-    if (pendingAdminEmail == null || userEmail == null) {
-      return;
-    }
-
-    if (pendingAdminEmail != userEmail) {
-      return;
-    }
-
-    try {
-      await Supabase.instance.client.rpc('promote_first_admin');
-    } catch (e) {
-      debugPrint('Pending setup admin promotion skipped: $e');
-    }
-
-    try {
-      final profile = await Supabase.instance.client
-          .from('user_profiles')
-          .select('is_admin')
-          .eq('id', supabaseUser.id)
-          .maybeSingle();
-
-      final isAdmin = profile?['is_admin'] as bool? ?? false;
-      if (!isAdmin) {
-        return;
-      }
-
-      await ref.read(appSettingsServiceProvider).markSetupCompleted();
-      await SetupPersistenceService.instance.markSetupCompleted();
-    } catch (e) {
-      debugPrint('Pending setup completion skipped: $e');
-    }
-  }
-
   Future<UserModel> _buildUserModel({
     required User supabaseUser,
     required String fallbackEmail,
     required String fallbackUsername,
   }) async {
-    await _finalizePendingSetupAdmin(supabaseUser);
-
     bool isAdmin = false;
     bool isPremium = false;
     DateTime? premiumExpiresAt;

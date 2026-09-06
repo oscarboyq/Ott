@@ -32,27 +32,39 @@ class AppSettingsService {
 
   /// Check if initial setup has been completed.
   Future<bool> isSetupCompleted() async {
-    try {
-      final row = await _client
-          .from('app_settings')
-          .select('value')
-          .eq('key', SettingKeys.setupCompleted)
-          .maybeSingle();
-      return row?['value'] == 'true';
-    } catch (_) {
-      return false;
-    }
+    final row = await _client
+        .from('app_settings')
+        .select('value')
+        .eq('key', SettingKeys.setupCompleted)
+        .maybeSingle()
+        .timeout(const Duration(seconds: 15));
+    final value = row?['value'];
+    if (value == 'true') return true;
+    if (value == 'false') return false;
+    // Missing rows, denied reads and malformed state are not new installs.
+    throw StateError('Installation status is missing or invalid.');
   }
 
   /// Mark setup as completed.
-  Future<void> markSetupCompleted() async {
+  Future<void> markSetupCompleted({String platformName = 'ReelHouse'}) async {
     await _client
-        .from('app_settings')
-        .update({
-          'value': 'true',
-          'updated_at': DateTime.now().toIso8601String(),
-        })
-        .eq('key', SettingKeys.setupCompleted);
+        .rpc(
+          'complete_installation',
+          params: {'platform_name': platformName.trim()},
+        )
+        .timeout(const Duration(seconds: 15));
+    if (!await isSetupCompleted()) {
+      throw StateError('Installation completion was not saved.');
+    }
+  }
+
+  Future<bool> isInstallationOwner() async {
+    if (_client.auth.currentUser == null) return false;
+    final result = await _client
+        .rpc('is_installation_owner')
+        .timeout(const Duration(seconds: 15));
+    if (result is! bool) throw StateError('Invalid owner status');
+    return result;
   }
 
   /// Get a single setting value.

@@ -4,7 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:video/core/constants/app_config.dart';
 import 'package:video/core/providers/auth_provider.dart';
 import 'package:video/core/services/app_settings_service.dart';
-import 'package:video/core/services/setup_persistence_service.dart';
+import 'package:video/features/setup/presentation/pages/setup_status_error_page.dart';
+import 'package:video/features/setup/presentation/pages/platform_pending_page.dart';
 import 'package:video/features/admin/presentation/pages/admin_dashboard_page.dart';
 import 'package:video/features/auth/presentation/pages/login_page.dart';
 import 'package:video/features/auth/presentation/pages/register_page.dart';
@@ -20,7 +21,7 @@ import 'package:video/features/video/presentation/pages/video_details_page_new.d
 final goRouterProvider = Provider<GoRouter>((ref) {
   final refreshNotifier = ValueNotifier<int>(0);
   ref.onDispose(refreshNotifier.dispose);
-  ref.listen<AuthState>(authProvider, (_, __) {
+  ref.listen<AuthState>(authProvider, (_, _) {
     refreshNotifier.value++;
   });
 
@@ -39,56 +40,48 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       final isSetupRoute = state.matchedLocation == '/setup';
       final isLoggingIn = state.matchedLocation == '/login';
       final isRegistering = state.matchedLocation == '/register';
+      final isPending = state.matchedLocation == '/platform-pending';
+      final isStatusError =
+          state.matchedLocation == '/installation-unavailable';
 
       if (!AppConstants.isConfigured) {
-        return isSetupRoute ? null : '/setup';
+        return isStatusError ? null : '/installation-unavailable';
       }
 
-      var isSetupCompleted = await SetupPersistenceService.instance
-          .isSetupCompleted();
+      late bool isSetupCompleted;
+      try {
+        // Always read Supabase, including direct /setup visits. Browser flags
+        // and the old Blob lock never decide installation state.
+        isSetupCompleted = await ref
+            .read(appSettingsServiceProvider)
+            .isSetupCompleted();
+      } catch (_) {
+        return isStatusError ? null : '/installation-unavailable';
+      }
 
       if (!isSetupCompleted) {
-        try {
-          isSetupCompleted = await ref
-              .read(appSettingsServiceProvider)
-              .isSetupCompleted();
-          if (isSetupCompleted) {
-            await SetupPersistenceService.instance.markSetupCompleted();
-          }
-        } catch (_) {
-          // Keep local setup flag authoritative if remote check fails.
+        final auth = ref.read(authProvider);
+        if (!auth.hasInitialized || !auth.isAuthenticated) {
+          return isLoggingIn || isPending ? null : '/platform-pending';
         }
-      }
-
-      // Third fallback: credentials are saved AND the database tables exist
-      // means the user already ran the SQL and created their admin account.
-      // Mark setup done locally so we never loop back to the wizard again.
-      if (!isSetupCompleted) {
         try {
-          final dbReady = await ref
+          final owner = await ref
               .read(appSettingsServiceProvider)
-              .isDatabaseReady();
-          if (dbReady) {
-            await SetupPersistenceService.instance
-                .markSetupAwaitingConfirmation();
-            isSetupCompleted = true;
-          }
+              .isInstallationOwner();
+          if (owner) return isSetupRoute ? null : '/setup';
+          return isPending ? null : '/platform-pending';
         } catch (_) {
-          // If Supabase is unreachable, fall through to setup.
+          return isStatusError ? null : '/installation-unavailable';
         }
-      }
-
-      if (!isSetupCompleted) {
-        return isSetupRoute ? null : '/setup';
       }
 
       final authState = ref.read(authProvider);
       final hasInitializedAuth = authState.hasInitialized;
       final isAuthenticated = authState.isAuthenticated;
 
-      if (isSetupRoute) {
+      if (isSetupRoute || isStatusError || isPending) {
         if (!hasInitializedAuth) {
-          return null;
+          return '/login';
         }
         return isAuthenticated ? '/' : '/login';
       }
@@ -114,6 +107,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: <RouteBase>[
+      GoRoute(
+        path: '/platform-pending',
+        builder: (context, state) => const PlatformPendingPage(),
+      ),
+      GoRoute(
+        path: '/installation-unavailable',
+        builder: (context, state) => const SetupStatusErrorPage(),
+      ),
       GoRoute(
         path: '/login',
         builder: (context, state) =>

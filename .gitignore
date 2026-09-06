@@ -30,6 +30,10 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
+/node_modules/
+/.vercel/
+.env*.local
+/config/supabase.json
 /build/
 /coverage/
 

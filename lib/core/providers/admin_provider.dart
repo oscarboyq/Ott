@@ -952,10 +952,12 @@ class AdminNotifier extends StateNotifier<AdminState> {
 
   Future<bool> setUserAdmin(String userId, {required bool isAdmin}) async {
     try {
-      await _db
-          .from('user_profiles')
-          .update({'is_admin': isAdmin})
-          .eq('id', userId);
+      // is_admin is intentionally not client-updatable. The RPC verifies that
+      // the caller is already an admin and prevents removing the last admin.
+      await _db.rpc(
+        'admin_set_user_admin',
+        params: {'target_user_id': userId, 'make_admin': isAdmin},
+      );
       return true;
     } catch (error, stackTrace) {
       _logError('setUserAdmin', error, stackTrace);

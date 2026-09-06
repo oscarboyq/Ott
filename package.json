@@ -1,0 +1,19 @@
+{
+  "name": "reelhouse-vercel-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Vercel Functions used by the ReelHouse Flutter application.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "config:web": "tsx scripts/write-public-config.ts",
+    "check:api": "tsc --noEmit",
+    "test:api": "tsx --test server/**/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.0"
+  }
+}

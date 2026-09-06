@@ -2,12 +2,7 @@ class AppConstants {
   // ============================================================
   // SUPABASE CONFIGURATION (Primary Backend)
   // ============================================================
-  // No defaults — the deployer must set these in web/config.js
-  // or the app will show the Setup Wizard.
-  static const String _defaultSupabaseUrl = '';
-  static const String _defaultSupabaseAnonKey = '';
-
-  /// Populated in main() from web/config.js, localStorage, or Setup Wizard.
+  /// Populated in main() from the bundled config/supabase.json asset.
   static String supabaseUrl = '';
   static String supabaseAnonKey = '';
 
@@ -15,14 +10,10 @@ class AppConstants {
   static bool get isConfigured =>
       supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
 
-  /// Call in main() and again from Setup Wizard when user enters credentials.
+  /// Called at startup after validating the bundled public configuration.
   static void loadConfig({String? webUrl, String? webAnonKey}) {
-    supabaseUrl = (webUrl != null && webUrl.isNotEmpty)
-        ? webUrl
-        : _defaultSupabaseUrl;
-    supabaseAnonKey = (webAnonKey != null && webAnonKey.isNotEmpty)
-        ? webAnonKey
-        : _defaultSupabaseAnonKey;
+    supabaseUrl = webUrl ?? '';
+    supabaseAnonKey = webAnonKey ?? '';
   }
 
   // ============================================================
