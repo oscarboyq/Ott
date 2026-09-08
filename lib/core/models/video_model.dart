@@ -16,6 +16,11 @@ class VideoModel extends Equatable {
   final bool requiresPremium;
   final bool isReel;
   final bool isFeatured;
+  final String mediaProvider;
+  final String? providerVideoId;
+  final String mediaStatus;
+  final int processingProgress;
+  final String? mediaError;
   final DateTime releaseDate;
   final DateTime createdAt;
   final String? director;
@@ -36,6 +41,11 @@ class VideoModel extends Equatable {
     required this.requiresPremium,
     this.isReel = false,
     this.isFeatured = false,
+    this.mediaProvider = 'external',
+    this.providerVideoId,
+    this.mediaStatus = 'ready',
+    this.processingProgress = 100,
+    this.mediaError,
     required this.releaseDate,
     required this.createdAt,
     this.director,
@@ -66,6 +76,11 @@ class VideoModel extends Equatable {
           !(json['is_free'] as bool? ?? true),
       isReel: (json['is_reel'] ?? json['isReel']) as bool? ?? false,
       isFeatured: json['is_featured'] as bool? ?? false,
+      mediaProvider: json['media_provider'] as String? ?? 'external',
+      providerVideoId: json['provider_video_id'] as String?,
+      mediaStatus: json['media_status'] as String? ?? 'ready',
+      processingProgress: json['processing_progress'] as int? ?? 100,
+      mediaError: json['media_error'] as String?,
       releaseDate: json['release_date'] != null
           ? DateTime.parse(json['release_date'] as String)
           : json['releaseDate'] != null
@@ -99,6 +114,11 @@ class VideoModel extends Equatable {
       'requiresPremium': requiresPremium,
       'isReel': isReel,
       'isFeatured': isFeatured,
+      'mediaProvider': mediaProvider,
+      'providerVideoId': providerVideoId,
+      'mediaStatus': mediaStatus,
+      'processingProgress': processingProgress,
+      'mediaError': mediaError,
       'releaseDate': releaseDate.toIso8601String(),
       'createdAt': createdAt.toIso8601String(),
       'director': director,
@@ -121,6 +141,11 @@ class VideoModel extends Equatable {
     bool? requiresPremium,
     bool? isReel,
     bool? isFeatured,
+    String? mediaProvider,
+    String? providerVideoId,
+    String? mediaStatus,
+    int? processingProgress,
+    String? mediaError,
     DateTime? releaseDate,
     DateTime? createdAt,
     String? director,
@@ -141,6 +166,11 @@ class VideoModel extends Equatable {
       requiresPremium: requiresPremium ?? this.requiresPremium,
       isReel: isReel ?? this.isReel,
       isFeatured: isFeatured ?? this.isFeatured,
+      mediaProvider: mediaProvider ?? this.mediaProvider,
+      providerVideoId: providerVideoId ?? this.providerVideoId,
+      mediaStatus: mediaStatus ?? this.mediaStatus,
+      processingProgress: processingProgress ?? this.processingProgress,
+      mediaError: mediaError ?? this.mediaError,
       releaseDate: releaseDate ?? this.releaseDate,
       createdAt: createdAt ?? this.createdAt,
       director: director ?? this.director,
@@ -164,6 +194,11 @@ class VideoModel extends Equatable {
     requiresPremium,
     isReel,
     isFeatured,
+    mediaProvider,
+    providerVideoId,
+    mediaStatus,
+    processingProgress,
+    mediaError,
     releaseDate,
     createdAt,
     director,

@@ -1,41 +1,22 @@
-import 'dart:async';
-import 'dart:html' as html;
-import 'dart:typed_data';
-
+import 'package:file_picker/file_picker.dart';
 import 'package:video/core/utils/picked_image_file.dart';
 
 Future<PickedImageFile?> pickImageFile() async {
-  final input = html.FileUploadInputElement()..accept = 'image/*';
-  input.click();
+  final result = await FilePicker.platform.pickFiles(
+    type: FileType.image,
+    allowMultiple: false,
+    withData: true,
+  );
 
-  await input.onChange.first;
-
-  final file = input.files?.isNotEmpty == true ? input.files!.first : null;
-  if (file == null) {
+  if (result == null || result.files.isEmpty) {
     return null;
   }
 
-  final reader = html.FileReader();
-  final completer = Completer<Uint8List>();
+  final file = result.files.single;
+  final bytes = file.bytes;
+  if (bytes == null || bytes.isEmpty) {
+    return null;
+  }
 
-  reader.onLoad.listen((_) {
-    final result = reader.result;
-    if (result is ByteBuffer) {
-      completer.complete(Uint8List.view(result));
-      return;
-    }
-    if (result is Uint8List) {
-      completer.complete(result);
-      return;
-    }
-    completer.completeError(Exception('Unsupported browser file result.'));
-  });
-
-  reader.onError.listen((_) {
-    completer.completeError(Exception('Failed to read selected image file.'));
-  });
-
-  reader.readAsArrayBuffer(file);
-  final bytes = await completer.future;
   return PickedImageFile(name: file.name, bytes: bytes);
 }
