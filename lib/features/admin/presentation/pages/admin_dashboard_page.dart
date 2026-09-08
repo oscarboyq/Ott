@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import 'package:cross_file/cross_file.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -13,8 +13,11 @@ import 'package:video/core/models/subscription_plan_model.dart';
 import 'package:video/core/models/video_model.dart';
 import 'package:video/core/providers/admin_provider.dart';
 import 'package:video/core/providers/auth_provider.dart';
+import 'package:video/core/providers/service_providers.dart';
 import 'package:video/core/services/app_settings_service.dart';
 import 'package:video/core/utils/image_picker_service.dart';
+import 'package:video/core/utils/video_picker_service.dart';
+import 'package:video/features/admin/presentation/controllers/media_upload_controller.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ADMIN DASHBOARD PAGE
@@ -172,7 +175,7 @@ Widget _adminGenreDropdownField(
 }) {
   final genreItems = _genreDropdownItems(ctrl.text);
   return DropdownButtonFormField<String>(
-    value: _genreDropdownValue(ctrl.text),
+    initialValue: _genreDropdownValue(ctrl.text),
     validator: validator,
     dropdownColor: const Color(0xFF162235),
     iconEnabledColor: Colors.white70,
@@ -704,7 +707,7 @@ class _SubscriptionsSectionState extends ConsumerState<_SubscriptionsSection> {
                           )
                         : ListView.separated(
                             itemCount: filteredPlans.length,
-                            separatorBuilder: (_, __) => const Divider(
+                            separatorBuilder: (_, _) => const Divider(
                               color: Color(0xFF1A2840),
                               height: 1,
                             ),
@@ -1399,7 +1402,7 @@ class _SeriesSectionState extends ConsumerState<_SeriesSection> {
                           )
                         : ListView.separated(
                             itemCount: filteredSeries.length,
-                            separatorBuilder: (_, __) => const Divider(
+                            separatorBuilder: (_, _) => const Divider(
                               color: Color(0xFF1A2840),
                               height: 1,
                             ),
@@ -1601,7 +1604,7 @@ class _SeriesRow extends StatelessWidget {
                         ? Image.network(
                             series.posterUrl,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
+                            errorBuilder: (_, _, _) => Container(
                               color: const Color(0xFF162235),
                               child: const Icon(
                                 Icons.live_tv_rounded,
@@ -1971,7 +1974,7 @@ class _VideosSectionState extends ConsumerState<_VideosSection> {
                           )
                         : ListView.separated(
                             itemCount: videos.length,
-                            separatorBuilder: (_, __) => const Divider(
+                            separatorBuilder: (_, _) => const Divider(
                               color: Color(0xFF1A2840),
                               height: 1,
                             ),
@@ -2019,17 +2022,20 @@ class _VideosSectionState extends ConsumerState<_VideosSection> {
   }
 
   void _confirmDelete(BuildContext context, VideoModel video) {
+    final typeLabel = video.isReel ? 'Reel' : 'Video';
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: const Color(0xFF0D1520),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text(
-          'Delete Video',
-          style: TextStyle(color: Colors.white),
+        title: Text(
+          'Delete $typeLabel',
+          style: const TextStyle(color: Colors.white),
         ),
         content: Text(
-          'Are you sure you want to delete "${video.title}"? This cannot be undone.',
+          video.mediaProvider == 'bunny'
+              ? 'Are you sure you want to delete "${video.title}"? This will permanently delete the video from Bunny Stream hosting, remove custom storage thumbnails, and delete the record.'
+              : 'Are you sure you want to delete "${video.title}"? This will remove custom storage thumbnails and delete the record permanently.',
           style: const TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -2217,6 +2223,18 @@ class _TableHeader extends StatelessWidget {
             ),
           ),
           SizedBox(
+            width: 110,
+            child: Text(
+              'MEDIA',
+              style: TextStyle(
+                color: Colors.white38,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+          SizedBox(
             width: 90,
             child: Text(
               'ACCESS',
@@ -2294,7 +2312,7 @@ class _VideoRow extends StatelessWidget {
                   ? Image.network(
                       video.thumbnailUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
+                      errorBuilder: (_, _, _) => Container(
                         color: const Color(0xFF162235),
                         child: const Icon(
                           Icons.movie,
@@ -2385,6 +2403,8 @@ class _VideoRow extends StatelessWidget {
             ),
           ),
 
+          SizedBox(width: 110, child: _MediaStatusBadge(video: video)),
+
           // Free toggle
           SizedBox(
             width: 90,
@@ -2395,8 +2415,8 @@ class _VideoRow extends StatelessWidget {
                     'free-${video.id}-${video.requiresPremium}',
                   ),
                   value: !video.requiresPremium,
-                  onChanged: onToggleFree,
-                  activeColor: const Color(0xFF21A45D),
+                  onChanged: video.mediaStatus == 'ready' ? onToggleFree : null,
+                  activeThumbColor: const Color(0xFF21A45D),
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
                 Text(
@@ -2429,8 +2449,10 @@ class _VideoRow extends StatelessWidget {
                       'featured-${video.id}-${video.isFeatured}',
                     ),
                     value: video.isFeatured,
-                    onChanged: onToggleFeatured,
-                    activeColor: const Color(0xFFFFB44C),
+                    onChanged: video.mediaStatus == 'ready'
+                        ? onToggleFeatured
+                        : null,
+                    activeThumbColor: const Color(0xFFFFB44C),
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
           ),
@@ -2477,9 +2499,67 @@ class _VideoRow extends StatelessWidget {
   }
 }
 
+class _MediaStatusBadge extends StatelessWidget {
+  const _MediaStatusBadge({required this.video});
+
+  final VideoModel video;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color, icon) = switch (video.mediaStatus) {
+      'creating' => ('CREATING', const Color(0xFFFFB44C), Icons.hourglass_top),
+      'uploading' => (
+        'UPLOADING',
+        const Color(0xFF1F9DCC),
+        Icons.cloud_upload_outlined,
+      ),
+      'processing' => (
+        '${video.processingProgress}%',
+        const Color(0xFFFFB44C),
+        Icons.settings_outlined,
+      ),
+      'failed' => ('FAILED', const Color(0xFFF05454), Icons.error_outline),
+      'deleting' => ('DELETING', Colors.white38, Icons.delete_outline),
+      _ => ('READY', const Color(0xFF21A45D), Icons.check_circle_outline),
+    };
+
+    return Tooltip(
+      message: video.mediaError ?? '${video.mediaProvider}: $label',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: color.withValues(alpha: 0.65)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: color),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // VIDEO FORM DIALOG (Add / Edit)
 // ─────────────────────────────────────────────────────────────────────────────
+
+enum _VideoMediaSource { bunny, external }
 
 class _VideoFormDialog extends ConsumerStatefulWidget {
   final VideoModel? existing;
@@ -2507,6 +2587,12 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
   bool _isFeatured = false;
   bool _isSubmitting = false;
   bool _isUploadingThumbnail = false;
+  _VideoMediaSource _mediaSource = _VideoMediaSource.bunny;
+  XFile? _selectedVideo;
+  int? _selectedVideoSize;
+  String? _videoSelectionError;
+  String? _bunnyDraftId;
+  bool _uploadTerminalStateHandled = false;
 
   String _formatError(Object error) {
     if (error is StorageException) {
@@ -2553,6 +2639,9 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
     _isFree = v != null ? !v.requiresPremium : true;
     _isReel = v?.isReel ?? widget.initialIsReel;
     _isFeatured = v?.isFeatured ?? false;
+    _mediaSource = v?.mediaProvider == 'bunny'
+        ? _VideoMediaSource.bunny
+        : _VideoMediaSource.external;
   }
 
   @override
@@ -2571,6 +2660,8 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
   Widget build(BuildContext context) {
     final isEdit = widget.existing != null;
     final contentLabel = _isReel ? 'Reel' : 'Video';
+    final uploadState = ref.watch(mediaUploadControllerProvider);
+    final uploadBusy = uploadState.isActive;
     return Dialog(
       backgroundColor: const Color(0xFF0D1520),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -2598,13 +2689,54 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                     const Spacer(),
                     IconButton(
                       icon: const Icon(Icons.close, color: Colors.white54),
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: uploadBusy
+                          ? null
+                          : () => Navigator.of(context).pop(),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
                 const Divider(color: Color(0xFF1A2840)),
                 const SizedBox(height: 16),
+
+                if (!isEdit) ...[
+                  _FormField(
+                    label: 'Media Source',
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _MediaSourceButton(
+                            label: 'Bunny Stream',
+                            icon: Icons.cloud_upload_outlined,
+                            selected: _mediaSource == _VideoMediaSource.bunny,
+                            onTap: uploadBusy
+                                ? null
+                                : () => setState(() {
+                                    _mediaSource = _VideoMediaSource.bunny;
+                                    _videoSelectionError = null;
+                                  }),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _MediaSourceButton(
+                            label: 'External URL',
+                            icon: Icons.link,
+                            selected:
+                                _mediaSource == _VideoMediaSource.external,
+                            onTap: uploadBusy
+                                ? null
+                                : () => setState(() {
+                                    _mediaSource = _VideoMediaSource.external;
+                                    _videoSelectionError = null;
+                                  }),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ],
 
                 // Title
                 _FormField(
@@ -2631,100 +2763,244 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
 
                 // Thumbnail URL
                 _FormField(
-                  label: 'Thumbnail URL *',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _textField(
-                              _thumbCtrl,
-                              'https://...image.jpg',
-                              validator: (v) => (v == null || v.trim().isEmpty)
-                                  ? 'Required'
-                                  : null,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          SizedBox(
-                            height: 46,
-                            child: OutlinedButton.icon(
-                              onPressed: _isUploadingThumbnail
-                                  ? null
-                                  : _pickAndUploadThumbnail,
-                              icon: _isUploadingThumbnail
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
+                  label: _mediaSource == _VideoMediaSource.bunny
+                      ? 'Thumbnail (optional)'
+                      : 'Thumbnail URL *',
+                  child: _mediaSource == _VideoMediaSource.bunny
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (_thumbCtrl.text.trim().isNotEmpty) ...[
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: SizedBox(
+                                  height: 140,
+                                  width: double.infinity,
+                                  child: Image.network(
+                                    _thumbCtrl.text.trim(),
+                                    fit: BoxFit.cover,
+                                    errorBuilder:
+                                        (context, error, stackTrace) =>
+                                            Container(
+                                      color: const Color(0xFF162235),
+                                      alignment: Alignment.center,
+                                      child: const Text(
+                                        'Thumbnail preview unavailable',
+                                        style: TextStyle(color: Colors.white38),
                                       ),
-                                    )
-                                  : const Icon(Icons.upload_file_outlined),
-                              label: Text(
-                                _isUploadingThumbnail
-                                    ? 'Uploading...'
-                                    : 'Pick Image',
+                                    ),
+                                  ),
+                                ),
                               ),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.white,
-                                side: const BorderSide(
-                                  color: Color(0xFF243247),
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  OutlinedButton.icon(
+                                    onPressed: _isUploadingThumbnail
+                                        ? null
+                                        : _pickAndUploadThumbnail,
+                                    icon: _isUploadingThumbnail
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : const Icon(Icons.upload_file_outlined),
+                                    label: Text(
+                                      _isUploadingThumbnail
+                                          ? 'Uploading...'
+                                          : 'Change Image',
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.white,
+                                      side: const BorderSide(
+                                        color: Color(0xFF243247),
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  TextButton.icon(
+                                    onPressed: _isUploadingThumbnail
+                                        ? null
+                                        : () {
+                                            setState(() {
+                                              _thumbCtrl.clear();
+                                            });
+                                          },
+                                    icon: const Icon(
+                                      Icons.delete_outline,
+                                      color: Colors.redAccent,
+                                      size: 18,
+                                    ),
+                                    label: const Text(
+                                      'Remove Custom Image',
+                                      style: TextStyle(color: Colors.redAccent),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              const Text(
+                                'Custom thumbnail will be used. Remove to let Bunny generate the thumbnail automatically.',
+                                style: TextStyle(
+                                  color: Colors.white38,
+                                  fontSize: 11,
                                 ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
+                              ),
+                            ] else ...[
+                              Row(
+                                children: [
+                                  OutlinedButton.icon(
+                                    onPressed: _isUploadingThumbnail
+                                        ? null
+                                        : _pickAndUploadThumbnail,
+                                    icon: _isUploadingThumbnail
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : const Icon(Icons.upload_file_outlined),
+                                    label: Text(
+                                      _isUploadingThumbnail
+                                          ? 'Uploading...'
+                                          : 'Pick Image',
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.white,
+                                      side: const BorderSide(
+                                        color: Color(0xFF243247),
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Optional fallback image. Bunny will generate a thumbnail during processing when no image is uploaded.',
+                                style: TextStyle(
+                                  color: Colors.white38,
+                                  fontSize: 11,
                                 ),
+                              ),
+                            ],
+                          ],
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _textField(
+                                    _thumbCtrl,
+                                    'https://...image.jpg',
+                                    validator: (v) =>
+                                        (v == null || v.trim().isEmpty)
+                                            ? 'Required'
+                                            : null,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                SizedBox(
+                                  height: 46,
+                                  child: OutlinedButton.icon(
+                                    onPressed: _isUploadingThumbnail
+                                        ? null
+                                        : _pickAndUploadThumbnail,
+                                    icon: _isUploadingThumbnail
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : const Icon(Icons.upload_file_outlined),
+                                    label: Text(
+                                      _isUploadingThumbnail
+                                          ? 'Uploading...'
+                                          : 'Pick Image',
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.white,
+                                      side: const BorderSide(
+                                        color: Color(0xFF243247),
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Upload to Supabase Storage or paste a public image URL manually.',
+                              style: TextStyle(
+                                color: Colors.white38,
+                                fontSize: 11,
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Upload to Supabase Storage or paste a public image URL manually.',
-                        style: const TextStyle(
-                          color: Colors.white38,
-                          fontSize: 11,
-                        ),
-                      ),
-                      if (_thumbCtrl.text.trim().isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: SizedBox(
-                            height: 140,
-                            width: double.infinity,
-                            child: Image.network(
-                              _thumbCtrl.text.trim(),
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Container(
-                                color: const Color(0xFF162235),
-                                alignment: Alignment.center,
-                                child: const Text(
-                                  'Thumbnail preview unavailable',
-                                  style: TextStyle(color: Colors.white38),
+                            if (_thumbCtrl.text.trim().isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: SizedBox(
+                                  height: 140,
+                                  width: double.infinity,
+                                  child: Image.network(
+                                    _thumbCtrl.text.trim(),
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, _, _) => Container(
+                                      color: const Color(0xFF162235),
+                                      alignment: Alignment.center,
+                                      child: const Text(
+                                        'Thumbnail preview unavailable',
+                                        style: TextStyle(color: Colors.white38),
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
-                          ),
+                            ],
+                          ],
                         ),
-                      ],
-                    ],
-                  ),
                 ),
                 const SizedBox(height: 14),
 
-                // Video URL
-                _FormField(
-                  label: 'Video URL *',
-                  child: _textField(
-                    _videoUrlCtrl,
-                    'https://...video.mp4',
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'Required' : null,
+                if (_mediaSource == _VideoMediaSource.bunny && !isEdit)
+                  _FormField(
+                    label: 'Video File *',
+                    child: _BunnyVideoPicker(
+                      file: _selectedVideo,
+                      fileSize: _selectedVideoSize,
+                      error: _videoSelectionError,
+                      enabled: !uploadBusy && !_isSubmitting,
+                      onPick: _pickVideo,
+                    ),
+                  )
+                else
+                  _FormField(
+                    label: 'Video URL *',
+                    child: _textField(
+                      _videoUrlCtrl,
+                      'https://...video.mp4',
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    ),
                   ),
-                ),
                 const SizedBox(height: 14),
 
                 // Genre + Duration row
@@ -2742,12 +3018,20 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                     const SizedBox(width: 16),
                     Expanded(
                       child: _FormField(
-                        label: 'Duration (seconds) *',
+                        label:
+                            _mediaSource == _VideoMediaSource.bunny && !isEdit
+                            ? 'Duration (from Bunny)'
+                            : 'Duration (seconds) *',
                         child: _textField(
                           _durationCtrl,
                           '3600',
                           keyboardType: TextInputType.number,
                           validator: (v) {
+                            if (_mediaSource == _VideoMediaSource.bunny &&
+                                !isEdit &&
+                                (v == null || v.trim().isEmpty)) {
+                              return null;
+                            }
                             if (v == null || v.trim().isEmpty) {
                               return 'Required';
                             }
@@ -2809,6 +3093,10 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                   ],
                 ),
                 const SizedBox(height: 24),
+                if (_mediaSource == _VideoMediaSource.bunny && !isEdit) ...[
+                  _BunnyUploadProgressCard(state: uploadState),
+                  const SizedBox(height: 16),
+                ],
                 const Divider(color: Color(0xFF1A2840)),
                 const SizedBox(height: 16),
 
@@ -2817,7 +3105,7 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     TextButton(
-                      onPressed: _isSubmitting
+                      onPressed: _isSubmitting || uploadBusy
                           ? null
                           : () => Navigator.of(context).pop(),
                       child: const Text(
@@ -2825,6 +3113,31 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                         style: TextStyle(color: Colors.white54),
                       ),
                     ),
+                    if (uploadState.stage == MediaUploadStage.uploading) ...[
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: () => ref
+                            .read(mediaUploadControllerProvider.notifier)
+                            .pause(),
+                        child: const Text('Pause'),
+                      ),
+                    ],
+                    if (uploadState.stage == MediaUploadStage.paused) ...[
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: () => ref
+                            .read(mediaUploadControllerProvider.notifier)
+                            .resume(),
+                        child: const Text('Resume'),
+                      ),
+                    ],
+                    if (uploadBusy) ...[
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: _cancelBunnyUpload,
+                        child: const Text('Cancel Upload'),
+                      ),
+                    ],
                     const SizedBox(width: 12),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
@@ -2838,7 +3151,7 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      onPressed: _isSubmitting ? null : _submit,
+                      onPressed: _isSubmitting || uploadBusy ? null : _submit,
                       child: _isSubmitting
                           ? const SizedBox(
                               width: 18,
@@ -2851,7 +3164,11 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                               ),
                             )
                           : Text(
-                              isEdit ? 'Save Changes' : 'Add $contentLabel',
+                              isEdit
+                                  ? 'Save Changes'
+                                  : _mediaSource == _VideoMediaSource.bunny
+                                  ? 'Upload $contentLabel'
+                                  : 'Add $contentLabel',
                               style: const TextStyle(
                                 fontWeight: FontWeight.w600,
                               ),
@@ -2886,6 +3203,19 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+
+    if (widget.existing == null &&
+        _mediaSource == _VideoMediaSource.bunny &&
+        _selectedVideo == null) {
+      setState(() => _videoSelectionError = 'Select a video file');
+      return;
+    }
+
+    if (widget.existing == null && _mediaSource == _VideoMediaSource.bunny) {
+      await _startBunnyUpload();
+      return;
+    }
+
     setState(() => _isSubmitting = true);
 
     final durationSecs = int.parse(_durationCtrl.text.trim());
@@ -2925,6 +3255,152 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
 
     setState(() => _isSubmitting = false);
     if (success && mounted) Navigator.of(context).pop();
+  }
+
+  Future<void> _startBunnyUpload() async {
+    final file = _selectedVideo;
+    if (file == null) return;
+
+    setState(() {
+      _isSubmitting = true;
+      _videoSelectionError = null;
+      _uploadTerminalStateHandled = false;
+    });
+
+    try {
+      final session = await ref
+          .read(bunnyStreamServiceProvider)
+          .createVideo(title: _titleCtrl.text.trim(), thumbnailTime: 5000);
+
+      final draftId = await ref
+          .read(adminProvider.notifier)
+          .addBunnyVideoDraft(
+            title: _titleCtrl.text,
+            description: _descCtrl.text,
+            thumbnailUrl: _thumbCtrl.text,
+            playbackUrl: session.playbackUrl,
+            bunnyVideoId: session.videoId,
+            genre: _genreCtrl.text,
+            isFree: _isFree,
+            isReel: _isReel,
+          );
+
+      if (!mounted) return;
+      setState(() {
+        _bunnyDraftId = draftId;
+        _isSubmitting = false;
+      });
+
+      unawaited(
+        ref
+            .read(mediaUploadControllerProvider.notifier)
+            .start(
+              file: file,
+              title: _titleCtrl.text.trim(),
+              session: session,
+              onComplete: _handleBunnyUploadComplete,
+              onError: _handleBunnyUploadError,
+            ),
+      );
+    } catch (error, stackTrace) {
+      final message = _formatError(error);
+      debugPrint('[AdminDashboardPage] Bunny upload setup failed: $message');
+      debugPrintStack(stackTrace: stackTrace);
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+        _showErrorSnackBar('Could not start Bunny upload: $message');
+      }
+    }
+  }
+
+  Future<void> _handleBunnyUploadComplete() async {
+    if (_uploadTerminalStateHandled) return;
+    _uploadTerminalStateHandled = true;
+    final draftId = _bunnyDraftId;
+    if (draftId == null) return;
+
+    try {
+      await ref
+          .read(adminProvider.notifier)
+          .updateBunnyMediaStatus(
+            id: draftId,
+            status: 'processing',
+            processingProgress: 0,
+          );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Upload completed. Bunny is now processing the video.',
+            ),
+            backgroundColor: Color(0xFF21A45D),
+          ),
+        );
+        Navigator.of(context).pop();
+      }
+    } catch (error) {
+      _uploadTerminalStateHandled = false;
+      if (mounted) {
+        _showErrorSnackBar(
+          'Upload completed, but the processing status could not be saved: $error',
+        );
+      }
+    }
+  }
+
+  Future<void> _handleBunnyUploadError(Object error) async {
+    if (_uploadTerminalStateHandled) return;
+    _uploadTerminalStateHandled = true;
+    final draftId = _bunnyDraftId;
+    if (draftId != null) {
+      try {
+        await ref
+            .read(adminProvider.notifier)
+            .updateBunnyMediaStatus(
+              id: draftId,
+              status: 'failed',
+              processingProgress: 0,
+              error: error.toString(),
+            );
+      } catch (_) {
+        // The upload error remains visible in the local progress card.
+      }
+    }
+  }
+
+  Future<void> _cancelBunnyUpload() async {
+    _uploadTerminalStateHandled = true;
+    await ref.read(mediaUploadControllerProvider.notifier).cancel();
+    final draftId = _bunnyDraftId;
+    if (draftId != null) {
+      await ref
+          .read(adminProvider.notifier)
+          .updateBunnyMediaStatus(
+            id: draftId,
+            status: 'failed',
+            processingProgress: 0,
+            error: 'Upload cancelled by administrator',
+          );
+    }
+  }
+
+  Future<void> _pickVideo() async {
+    try {
+      final file = await pickVideoFile();
+      if (file == null) return;
+
+      final size = await file.length();
+      if (!mounted) return;
+      setState(() {
+        _selectedVideo = file;
+        _selectedVideoSize = size;
+        _videoSelectionError = null;
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _videoSelectionError = 'Could not read video: $error');
+      }
+    }
   }
 
   Future<void> _pickAndUploadThumbnail() async {
@@ -2968,6 +3444,10 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
         setState(() => _isUploadingThumbnail = false);
         _showErrorSnackBar('Thumbnail upload failed: $message');
       }
+    } finally {
+      if (mounted && _isUploadingThumbnail) {
+        setState(() => _isUploadingThumbnail = false);
+      }
     }
   }
 
@@ -2992,6 +3472,273 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
       default:
         return 'image/jpeg';
     }
+  }
+}
+
+class _MediaSourceButton extends StatelessWidget {
+  const _MediaSourceButton({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? const Color(0xFFF05454) : Colors.white38;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(9),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        decoration: BoxDecoration(
+          color: selected
+              ? const Color(0xFFF05454).withValues(alpha: 0.12)
+              : const Color(0xFF111B29),
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: color),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 18, color: color),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: selected ? Colors.white : Colors.white60,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BunnyVideoPicker extends StatelessWidget {
+  const _BunnyVideoPicker({
+    required this.file,
+    required this.fileSize,
+    required this.error,
+    required this.enabled,
+    required this.onPick,
+  });
+
+  final XFile? file;
+  final int? fileSize;
+  final String? error;
+  final bool enabled;
+  final VoidCallback onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF111B29),
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(
+              color: error != null
+                  ? const Color(0xFFF05454)
+                  : const Color(0xFF243247),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF05454).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.video_file_outlined,
+                  color: Color(0xFFF05454),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: file == null
+                    ? const Text(
+                        'MP4, MOV, WebM, MKV or AVI',
+                        style: TextStyle(color: Colors.white38, fontSize: 12),
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            file!.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            _formatFileSize(fileSize ?? 0),
+                            style: const TextStyle(
+                              color: Colors.white38,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
+                onPressed: enabled ? onPick : null,
+                icon: const Icon(Icons.folder_open_outlined, size: 17),
+                label: Text(file == null ? 'Select Video' : 'Change'),
+              ),
+            ],
+          ),
+        ),
+        if (error != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            error!,
+            style: const TextStyle(color: Color(0xFFF05454), fontSize: 12),
+          ),
+        ],
+        const SizedBox(height: 7),
+        const Text(
+          'The file uploads directly from this device to Bunny Stream.',
+          style: TextStyle(color: Colors.white38, fontSize: 11),
+        ),
+      ],
+    );
+  }
+
+  static String _formatFileSize(int bytes) {
+    if (bytes >= 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+    }
+    if (bytes >= 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '$bytes bytes';
+  }
+}
+
+class _BunnyUploadProgressCard extends StatelessWidget {
+  const _BunnyUploadProgressCard({required this.state});
+
+  final MediaUploadState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = state.stage != MediaUploadStage.idle;
+    if (!visible) return const SizedBox.shrink();
+
+    final failed = state.stage == MediaUploadStage.failed;
+    final cancelled = state.stage == MediaUploadStage.cancelled;
+    final color = failed || cancelled
+        ? const Color(0xFFF05454)
+        : state.stage == MediaUploadStage.uploaded
+        ? const Color(0xFF21A45D)
+        : const Color(0xFFFFB44C);
+
+    final label = switch (state.stage) {
+      MediaUploadStage.idle => '',
+      MediaUploadStage.uploading => 'Uploading to Bunny Stream',
+      MediaUploadStage.paused => 'Upload paused',
+      MediaUploadStage.uploaded => 'Upload complete — preparing processing',
+      MediaUploadStage.cancelled => 'Upload cancelled',
+      MediaUploadStage.failed => 'Upload failed',
+    };
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111B29),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.55)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                failed || cancelled
+                    ? Icons.error_outline
+                    : state.stage == MediaUploadStage.uploaded
+                    ? Icons.check_circle_outline
+                    : Icons.cloud_upload_outlined,
+                color: color,
+                size: 19,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Text(
+                '${state.progress.toStringAsFixed(1)}%',
+                style: TextStyle(color: color, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          LinearProgressIndicator(
+            value: state.progress.clamp(0, 100) / 100,
+            minHeight: 8,
+            borderRadius: BorderRadius.circular(8),
+            color: color,
+            backgroundColor: const Color(0xFF243247),
+          ),
+          if (state.estimatedRemaining != null &&
+              state.stage == MediaUploadStage.uploading) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Estimated time remaining: ${_formatDuration(state.estimatedRemaining!)}',
+              style: const TextStyle(color: Colors.white54, fontSize: 11),
+            ),
+          ],
+          if (state.error != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              state.error!,
+              style: const TextStyle(color: Color(0xFFF05454), fontSize: 11),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static String _formatDuration(Duration duration) {
+    if (duration.inHours > 0) {
+      return '${duration.inHours}h ${duration.inMinutes.remainder(60)}m';
+    }
+    if (duration.inMinutes > 0) {
+      return '${duration.inMinutes}m ${duration.inSeconds.remainder(60)}s';
+    }
+    return '${duration.inSeconds}s';
   }
 }
 
@@ -3100,7 +3847,7 @@ class _AdminImageUploadField extends StatelessWidget {
                       child: Image.network(
                         imageUrl,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
+                        errorBuilder: (_, _, _) => Container(
                           color: const Color(0xFF162235),
                           alignment: Alignment.center,
                           child: Text(
@@ -3745,7 +4492,7 @@ class _SeriesStructureDialogState
                         )
                       : ListView.separated(
                           itemCount: _episodes.length,
-                          separatorBuilder: (_, __) =>
+                          separatorBuilder: (_, _) =>
                               const SizedBox(height: 10),
                           itemBuilder: (context, index) {
                             final episode = _episodes[index];
@@ -4524,11 +5271,12 @@ class _UsersSectionState extends ConsumerState<_UsersSection> {
   Future<void> _loadUsers() async {
     setState(() => _loading = true);
     final users = await ref.read(adminProvider.notifier).loadUsers();
-    if (mounted)
+    if (mounted) {
       setState(() {
         _users = users;
         _loading = false;
       });
+    }
   }
 
   @override
@@ -4630,7 +5378,7 @@ class _UsersSectionState extends ConsumerState<_UsersSection> {
                         Expanded(
                           child: ListView.separated(
                             itemCount: _users.length,
-                            separatorBuilder: (_, __) => const Divider(
+                            separatorBuilder: (_, _) => const Divider(
                               color: Color(0xFF1A2840),
                               height: 1,
                             ),
@@ -4670,7 +5418,7 @@ class _UsersSectionState extends ConsumerState<_UsersSection> {
                                       width: 100,
                                       child: Switch(
                                         value: isAdmin,
-                                        activeColor: const Color(0xFFFFB44C),
+                                        activeThumbColor: const Color(0xFFFFB44C),
                                         onChanged: (v) async {
                                           await ref
                                               .read(adminProvider.notifier)
@@ -4716,30 +5464,6 @@ class _SettingsSectionState extends ConsumerState<_SettingsSection> {
   String? _message;
 
   static const _settingGroups = [
-    _SettingGroup(
-      title: 'Bunny CDN (Video Hosting)',
-      icon: Icons.cloud_outlined,
-      description:
-          'Connect your Bunny.net Stream library to serve and manage video files.',
-      keys: [
-        _SettingField(
-          key: 'bunny_cdn_api_key',
-          label: 'API Key',
-          hint: 'Your Bunny.net API key',
-          isSecret: true,
-        ),
-        _SettingField(
-          key: 'bunny_cdn_library_id',
-          label: 'Library ID',
-          hint: 'e.g. 123456',
-        ),
-        _SettingField(
-          key: 'bunny_cdn_pull_zone',
-          label: 'Pull Zone Hostname',
-          hint: 'e.g. vz-abc123.b-cdn.net',
-        ),
-      ],
-    ),
     _SettingGroup(
       title: 'NOWPayments (Crypto Payments)',
       icon: Icons.payment_outlined,

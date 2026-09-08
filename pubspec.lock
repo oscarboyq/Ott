@@ -25,6 +25,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.11.3"
+  another_tus_client:
+    dependency: "direct main"
+    description:
+      name: another_tus_client
+      sha256: a72f3ca51700bf17ec3067ff37d311ebf9c7d7afba4a36413bbc43844167b9af
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.2.6"
   app_links:
     dependency: transitive
     description:
@@ -242,7 +250,7 @@ packages:
     source: hosted
     version: "3.1.2"
   cross_file:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: cross_file
       sha256: "28bb3ae56f117b5aec029d702a90f57d285cd975c3c5c281eaca38dbc47c5937"
@@ -1061,6 +1069,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.10.2"
+  speed_test_dart:
+    dependency: transitive
+    description:
+      name: speed_test_dart
+      sha256: "4131faa68d5c9259766626450a10e552bc11ff6e651bb6377cc56476443e1cfa"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.5+0"
   sqflite:
     dependency: transitive
     description:
@@ -1165,6 +1181,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.12.2"
+  sync:
+    dependency: transitive
+    description:
+      name: sync
+      sha256: f2ebb89eac969abb02b498562a35c4da63d6843396c4fe81948cd06a76845fce
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.3.0"
   synchronized:
     dependency: transitive
     description:
@@ -1205,6 +1229,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.0"
+  universal_io:
+    dependency: transitive
+    description:
+      name: universal_io
+      sha256: f63cbc48103236abf48e345e07a03ce5757ea86285ed313a6a032596ed9301e2
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.3.1"
   url_launcher:
     dependency: transitive
     description:

@@ -6,6 +6,7 @@ import 'package:video/core/models/series_model.dart';
 import 'package:video/core/models/series_season_model.dart';
 import 'package:video/core/models/subscription_plan_model.dart';
 import 'package:video/core/models/video_model.dart';
+import 'package:video/core/utils/storage_cleanup_helper.dart';
 
 // ─────────────────────────────────────────
 // Admin State
@@ -344,6 +345,69 @@ class AdminNotifier extends StateNotifier<AdminState> {
     }
   }
 
+  Future<String> addBunnyVideoDraft({
+    required String title,
+    required String description,
+    required String thumbnailUrl,
+    required String playbackUrl,
+    required String bunnyVideoId,
+    required String genre,
+    required bool isFree,
+    required bool isReel,
+  }) async {
+    try {
+      final inserted = await _db
+          .from('videos')
+          .insert({
+            'title': title.trim(),
+            'description': description.trim(),
+            'thumbnail_url': thumbnailUrl.trim(),
+            'video_url': playbackUrl.trim(),
+            'category': genre.trim(),
+            'is_free': isFree,
+            'is_reel': isReel,
+            'is_featured': false,
+            'rating': 0.0,
+            'views_count': 0,
+            'release_date': DateTime.now().toIso8601String().substring(0, 10),
+            'media_provider': 'bunny',
+            'provider_video_id': bunnyVideoId,
+            'media_status': 'uploading',
+            'processing_progress': 0,
+            'media_error': null,
+          })
+          .select('id')
+          .single();
+      await loadVideos();
+      return inserted['id'] as String;
+    } catch (error, stackTrace) {
+      _logError('addBunnyVideoDraft', error, stackTrace);
+      rethrow;
+    }
+  }
+
+  Future<void> updateBunnyMediaStatus({
+    required String id,
+    required String status,
+    int? processingProgress,
+    String? error,
+  }) async {
+    try {
+      await _db
+          .from('videos')
+          .update({
+            'media_status': status,
+            'processing_progress': ?processingProgress,
+            'media_error': error,
+          })
+          .eq('id', id);
+      await loadVideos();
+    } catch (exception, stackTrace) {
+      _logError('updateBunnyMediaStatus', exception, stackTrace);
+      rethrow;
+    }
+  }
+
   Future<bool> updateVideo({
     required String id,
     required String title,
@@ -360,6 +424,15 @@ class AdminNotifier extends StateNotifier<AdminState> {
     try {
       if (isFeatured) {
         await _clearFeaturedVideos(exceptId: id);
+      }
+
+      // If custom thumbnail changed, clean up old storage thumbnail
+      final existingVideo = state.videos.where((v) => v.id == id).firstOrNull;
+      final oldThumbnail = existingVideo?.thumbnailUrl;
+      if (oldThumbnail != null &&
+          oldThumbnail.isNotEmpty &&
+          oldThumbnail != thumbnailUrl.trim()) {
+        await StorageCleanupHelper.tryDeleteThumbnail(oldThumbnail);
       }
 
       await _db
@@ -389,6 +462,32 @@ class AdminNotifier extends StateNotifier<AdminState> {
   Future<bool> deleteVideo(String id) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
+      final video = state.videos.where((v) => v.id == id).firstOrNull;
+
+      // 1. If it's a Bunny video, delete from Bunny Stream API
+      final bunnyVideoId = video?.providerVideoId;
+      if (video?.mediaProvider == 'bunny' &&
+          bunnyVideoId != null &&
+          bunnyVideoId.isNotEmpty) {
+        try {
+          final res = await _db.functions.invoke(
+            'bunny-delete-video',
+            body: {'videoId': bunnyVideoId},
+          );
+          if (res.status >= 400) {
+            debugPrint('[AdminProvider] Bunny delete response: ${res.data}');
+          }
+        } catch (bunnyError) {
+          debugPrint('[AdminProvider] Could not delete video from Bunny Stream: $bunnyError');
+        }
+      }
+
+      // 2. If video has a custom thumbnail in Supabase Storage, delete it
+      if (video != null && video.thumbnailUrl.isNotEmpty) {
+        await StorageCleanupHelper.tryDeleteThumbnail(video.thumbnailUrl);
+      }
+
+      // 3. Delete from PostgreSQL
       await _db.from('videos').delete().eq('id', id);
       await loadVideos();
       state = state.copyWith(successMessage: 'Video deleted');

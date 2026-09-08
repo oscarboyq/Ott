@@ -1,11 +1,12 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:video/core/models/bunny_upload_session.dart';
 
 class BunnyStreamService {
   BunnyStreamService(this._supabase);
 
   final SupabaseClient _supabase;
 
-  Future<Map<String, dynamic>> createVideo({
+  Future<BunnyUploadSession> createVideo({
     required String title,
     String? collectionId,
     int? thumbnailTime,
@@ -16,7 +17,7 @@ class BunnyStreamService {
         'title': title,
         if (collectionId != null && collectionId.isNotEmpty)
           'collectionId': collectionId,
-        if (thumbnailTime != null) 'thumbnailTime': thumbnailTime,
+        'thumbnailTime': ?thumbnailTime,
       },
     );
 
@@ -28,7 +29,7 @@ class BunnyStreamService {
       throw Exception('Unexpected Bunny create video response');
     }
 
-    return Map<String, dynamic>.from(data);
+    return BunnyUploadSession.fromJson(Map<String, dynamic>.from(data));
   }
 
   Future<Map<String, dynamic>> getVideo(String videoId) async {
@@ -46,5 +47,17 @@ class BunnyStreamService {
     }
 
     return Map<String, dynamic>.from(data);
+  }
+
+  Future<void> deleteVideo(String videoId) async {
+    final response = await _supabase.functions.invoke(
+      'bunny-delete-video',
+      body: {'videoId': videoId},
+    );
+
+    if (response.status >= 400) {
+      final data = response.data;
+      throw Exception('Bunny delete video failed: $data');
+    }
   }
 }
