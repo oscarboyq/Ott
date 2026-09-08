@@ -19,6 +19,22 @@ Engineered from the ground up to reflect modern production patterns, ReelHouse d
 
 ---
 
+## 📸 Product Showcase
+
+<p align="center">
+  <img src="docs/screenshots/home_catalog.png" alt="ReelHouse Home Catalog & Hero Banner" width="100%" />
+  <br>
+  <em>🎬 Home Catalog: Dynamic Hero Showcase, Genre Navigation Rails & Continue Watching Sync</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/admin_dashboard.png" alt="ReelHouse Admin Video Management" width="100%" />
+  <br>
+  <em>🛠️ Admin Console: Real-time Content Metrics, Video Management & Bunny Stream CDN Integration</em>
+</p>
+
+---
+
 ## 🌟 Key Product Features
 
 | Capability | Technical Details |
