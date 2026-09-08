@@ -229,7 +229,7 @@ class ApiService {
       final data = await filterBuilder
           .order('created_at', ascending: false)
           .range(offset, offset + limit - 1);
-      return _mergeVideoRatingStatsIntoList(data as List<dynamic>);
+      return await _mergeVideoRatingStatsIntoList(data as List<dynamic>);
     } catch (e) {
       throw UnknownException(e.toString());
     }
@@ -418,7 +418,7 @@ class ApiService {
           .select()
           .eq('id', videoId)
           .single();
-      return _mergeVideoRatingStatsIntoItem(data);
+      return await _mergeVideoRatingStatsIntoItem(data);
     } catch (e) {
       throw UnknownException(e.toString());
     }
@@ -580,7 +580,7 @@ class ApiService {
       final data = await filterBuilder
           .order('created_at', ascending: false)
           .range(offset, offset + limit - 1);
-      return _mergeVideoRatingStatsIntoList(data as List<dynamic>);
+      return await _mergeVideoRatingStatsIntoList(data as List<dynamic>);
     } catch (e) {
       throw UnknownException(e.toString());
     }

@@ -106,7 +106,7 @@ class _SeriesEpisodePageState extends ConsumerState<SeriesEpisodePage> {
               episodesLoading: true,
               onEpisodeTap: (_) {},
             ),
-            error: (_, __) => _EpisodePageContent(
+            error: (_, _) => _EpisodePageContent(
               episode: episode,
               seriesTitle: seriesAsync.valueOrNull?.title ?? '',
               controller: _controller,
@@ -119,7 +119,7 @@ class _SeriesEpisodePageState extends ConsumerState<SeriesEpisodePage> {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) => const Center(
+        error: (_, _) => const Center(
           child: Text(
             'Unable to load episode',
             style: TextStyle(color: Colors.white54),

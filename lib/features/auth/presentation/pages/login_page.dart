@@ -72,7 +72,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                 crossAxisCount: 8,
                               ),
                           itemCount: 200,
-                          itemBuilder: (_, __) => const Icon(
+                          itemBuilder: (_, _) => const Icon(
                             Icons.movie_outlined,
                             color: Colors.white,
                           ),

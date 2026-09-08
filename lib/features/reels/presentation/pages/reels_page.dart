@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -730,7 +729,7 @@ class _PosterBackground extends StatelessWidget {
           : Image.network(
               reel.thumbnailUrl,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => const Center(
+              errorBuilder: (_, _, _) => const Center(
                 child: Icon(
                   Icons.broken_image_outlined,
                   color: Colors.white24,

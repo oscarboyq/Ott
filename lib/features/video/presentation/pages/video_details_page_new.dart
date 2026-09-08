@@ -638,7 +638,7 @@ class _VideoDetailsPageState extends ConsumerState<VideoDetailsPage> {
                   },
                   iconSize: 30,
                   style: IconButton.styleFrom(
-                    backgroundColor: const Color(0x1FFFFB44C),
+                    backgroundColor: const Color(0x1ffffb44c),
                     shape: const CircleBorder(),
                     side: const BorderSide(color: Color(0x66FFB44C)),
                   ),

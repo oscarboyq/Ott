@@ -13,7 +13,7 @@ class SecureStorageService {
         storageCipherAlgorithm: StorageCipherAlgorithm.AES_GCM_NoPadding,
         resetOnError: true,
       ),
-      iOptions: const IOSOptions(),
+      iOptions: IOSOptions(),
     );
   }
 

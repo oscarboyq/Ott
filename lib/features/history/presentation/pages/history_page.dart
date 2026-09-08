@@ -83,7 +83,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
               child: ListView.separated(
                 padding: const EdgeInsets.all(16),
                 itemCount: combinedItems.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                separatorBuilder: (_, _) => const SizedBox(height: 12),
                 itemBuilder: (context, index) {
                   final item = combinedItems[index];
                   if (item.videoItem != null) {
@@ -196,7 +196,7 @@ class _VideoHistoryListCard extends StatelessWidget {
                   child: Image.network(
                     item.video.thumbnailUrl,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
+                    errorBuilder: (_, _, _) => Container(
                       color: const Color(0xFF162235),
                       alignment: Alignment.center,
                       child: const Icon(
@@ -305,7 +305,7 @@ class _SeriesHistoryListCard extends StatelessWidget {
                   child: Image.network(
                     thumbnailUrl,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
+                    errorBuilder: (_, _, _) => Container(
                       color: const Color(0xFF162235),
                       alignment: Alignment.center,
                       child: const Icon(

@@ -219,7 +219,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: _genres.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      separatorBuilder: (_, _) => const SizedBox(width: 8),
                       itemBuilder: (context, i) {
                         final g = _genres[i];
                         final selected = g == _selectedGenre;
@@ -317,7 +317,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                           onTap: () => _openSearchResult(context, item),
                         );
                       },
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      separatorBuilder: (_, _) => const SizedBox(height: 12),
                     ),
                   ),
 
@@ -1008,7 +1008,7 @@ class _SearchSuggestionPanel extends StatelessWidget {
                                         : Image.network(
                                             result.imageUrl,
                                             fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) =>
+                                            errorBuilder: (_, _, _) =>
                                                 Container(
                                                   color: const Color(
                                                     0xFF162235,
@@ -1153,7 +1153,7 @@ class _SearchResultTile extends StatelessWidget {
                       ? Image.network(
                           result.imageUrl,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
+                          errorBuilder: (_, _, _) => Container(
                             color: const Color(0xFF162235),
                             alignment: Alignment.center,
                             child: Icon(
@@ -1337,7 +1337,7 @@ class _ReelsPromoRow extends StatelessWidget {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: previewReels.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              separatorBuilder: (_, _) => const SizedBox(width: 12),
               itemBuilder: (context, index) {
                 final reel = previewReels[index];
                 return GestureDetector(
@@ -1357,7 +1357,7 @@ class _ReelsPromoRow extends StatelessWidget {
                           Image.network(
                             reel.thumbnailUrl,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) =>
+                            errorBuilder: (_, _, _) =>
                                 Container(color: const Color(0xFF162235)),
                           )
                         else
@@ -1497,7 +1497,7 @@ class _HeroBanner extends StatelessWidget {
           Image.network(
             video.thumbnailUrl,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(
+            errorBuilder: (_, _, _) => Container(
               color: const Color(0xFF101826),
               child: const Center(
                 child: Icon(
@@ -1767,7 +1767,7 @@ class _ContinueWatchingRow extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: items.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              separatorBuilder: (_, _) => const SizedBox(width: 12),
               itemBuilder: (context, index) {
                 final item = items[index];
                 return SizedBox(
@@ -1854,7 +1854,7 @@ class _ContinueWatchingCardState extends State<_ContinueWatchingCard> {
                       Image.network(
                         entry.thumbnailUrl,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
+                        errorBuilder: (_, _, _) => Container(
                           color: const Color(0xFF162235),
                           alignment: Alignment.center,
                           child: Icon(
@@ -2114,7 +2114,7 @@ class _HorizontalRow extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: videos.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              separatorBuilder: (_, _) => const SizedBox(width: 10),
               itemBuilder: (context, i) {
                 final v = videos[i];
                 return SizedBox(
@@ -2213,7 +2213,7 @@ class _SeriesHorizontalRow extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: series.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              separatorBuilder: (_, _) => const SizedBox(width: 12),
               itemBuilder: (context, index) {
                 final item = series[index];
                 return SizedBox(
@@ -2261,7 +2261,7 @@ class _SeriesCard extends StatelessWidget {
                     Image.network(
                       imageUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
+                      errorBuilder: (_, _, _) => Container(
                         color: const Color(0xFF162235),
                         alignment: Alignment.center,
                         child: const Icon(
@@ -2408,8 +2408,8 @@ class _LoadingSkeleton extends StatelessWidget {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: 5,
-              separatorBuilder: (_, __) => const SizedBox(width: 10),
-              itemBuilder: (_, __) => _Shimmer(
+              separatorBuilder: (_, _) => const SizedBox(width: 10),
+              itemBuilder: (_, _) => _Shimmer(
                 child: Container(
                   width: 145,
                   decoration: BoxDecoration(

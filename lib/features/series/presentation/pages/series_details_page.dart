@@ -75,7 +75,7 @@ class _SeriesDetailsPageState extends ConsumerState<SeriesDetailsPage> {
                   },
                   episodesLoading: true,
                 ),
-                error: (_, __) => _SeriesDetailsContent(
+                error: (_, _) => _SeriesDetailsContent(
                   series: series,
                   seasons: seasons,
                   selectedSeason: activeSeason,
@@ -91,12 +91,12 @@ class _SeriesDetailsPageState extends ConsumerState<SeriesDetailsPage> {
               );
             },
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (_, __) =>
+            error: (_, _) =>
                 const _SeriesErrorState(message: 'Unable to load seasons'),
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) =>
+        error: (_, _) =>
             const _SeriesErrorState(message: 'Unable to load series details'),
       ),
     );
@@ -178,7 +178,7 @@ class _SeriesDetailsContent extends StatelessWidget {
                   Image.network(
                     series.backdropUrl,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) =>
+                    errorBuilder: (_, _, _) =>
                         Container(color: const Color(0xFF101826)),
                   )
                 else
@@ -426,7 +426,7 @@ class _SeriesDetailsContent extends StatelessWidget {
                   ),
                 );
               },
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
             ),
           ),
       ],
@@ -476,7 +476,7 @@ class _EpisodeTile extends StatelessWidget {
                       ? Image.network(
                           episode.thumbnailUrl,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
+                          errorBuilder: (_, _, _) => Container(
                             color: const Color(0xFF162235),
                             alignment: Alignment.center,
                             child: const Icon(

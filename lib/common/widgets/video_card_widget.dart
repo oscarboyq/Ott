@@ -68,7 +68,7 @@ class _VideoCardWidgetState extends State<VideoCardWidget> {
                 Image.network(
                   widget.thumbnailUrl,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
+                  errorBuilder: (_, _, _) => Container(
                     color: const Color(0xFF162235),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -148,7 +148,7 @@ class _VideoCardWidgetState extends State<VideoCardWidget> {
                               ),
                             ),
                             if (widget.durationSeconds != null) ...[
-                              const SizedBox(width: 6),
+                              const SizedBox(width: 4),
                               const Text(
                                 '·',
                                 style: TextStyle(
@@ -156,12 +156,16 @@ class _VideoCardWidgetState extends State<VideoCardWidget> {
                                   fontSize: 10,
                                 ),
                               ),
-                              const SizedBox(width: 6),
-                              Text(
-                                _formatDuration(widget.durationSeconds!),
-                                style: const TextStyle(
-                                  color: Colors.white54,
-                                  fontSize: 10,
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  _formatDuration(widget.durationSeconds!),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 10,
+                                  ),
                                 ),
                               ),
                             ],
