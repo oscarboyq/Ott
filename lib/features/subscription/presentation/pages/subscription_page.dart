@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:video/app/theme/app_theme.dart';
 import 'package:video/core/models/crypto_payment_model.dart';
 import 'package:video/core/models/subscription_plan_model.dart';
 import 'package:video/core/providers/auth_provider.dart';
@@ -32,13 +33,13 @@ class SubscriptionPage extends ConsumerWidget {
         : normalized;
   }
 
-  Widget _buildCurrencyText(String? payCurrency) {
+  Widget _buildCurrencyText(BuildContext context, String? payCurrency) {
     final normalized = (payCurrency ?? 'usdtbsc').toLowerCase();
     if (normalized == 'usdtbsc') {
       return RichText(
-        text: const TextSpan(
+        text: TextSpan(
           children: <InlineSpan>[
-            TextSpan(
+            const TextSpan(
               text: 'USDT',
               style: TextStyle(
                 color: _currencyBaseColor,
@@ -46,11 +47,11 @@ class SubscriptionPage extends ConsumerWidget {
                 fontSize: 16,
               ),
             ),
-            WidgetSpan(child: SizedBox(width: 6)),
+            const WidgetSpan(child: SizedBox(width: 6)),
             TextSpan(
               text: 'bsc',
               style: TextStyle(
-                color: Color(0xFF8EA0B8),
+                color: context.textSecondary,
                 fontWeight: FontWeight.w600,
                 fontSize: 12,
               ),
@@ -103,25 +104,14 @@ class SubscriptionPage extends ConsumerWidget {
     final hasPremiumAccess = authState.user?.isPremium == true;
 
     return Scaffold(
+      backgroundColor: context.scaffoldBg,
       appBar: AppBar(title: const Text('Premium Plans')),
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: <Color>[
-              Color(0xFF070B12),
-              Color(0xFF0B1019),
-              Color(0xFF070B12),
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1180),
-              child: ListView(
-                padding: const EdgeInsets.all(20),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1180),
+            child: ListView(
+              padding: const EdgeInsets.all(20),
                 children: <Widget>[
                   Container(
                     padding: const EdgeInsets.all(26),
@@ -195,6 +185,7 @@ class SubscriptionPage extends ConsumerWidget {
                     _CryptoPaymentPanel(
                       payment: selectedPayment,
                       currencyText: _buildCurrencyText(
+                        context,
                         selectedPayment.payCurrency,
                       ),
                       payAmountText: _formatPayAmount(selectedPayment),
@@ -223,7 +214,9 @@ class SubscriptionPage extends ConsumerWidget {
                     Container(
                       padding: const EdgeInsets.all(18),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF2B1420),
+                        color: const Color(0xFFF05454).withValues(
+                          alpha: context.isDark ? 0.2 : 0.1,
+                        ),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(color: const Color(0xFFF05454)),
                       ),
@@ -241,7 +234,7 @@ class SubscriptionPage extends ConsumerWidget {
                           Expanded(
                             child: Text(
                               _checkoutErrorMessage(cryptoCheckoutState.error!),
-                              style: const TextStyle(color: Colors.white),
+                              style: TextStyle(color: context.textPrimary),
                             ),
                           ),
                         ],
@@ -400,7 +393,6 @@ class SubscriptionPage extends ConsumerWidget {
             ),
           ),
         ),
-      ),
     );
   }
 }
@@ -438,20 +430,20 @@ class _CryptoPaymentPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFF101826),
+        color: context.surfaceBg,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFF243247)),
+        border: Border.all(color: context.borderCol),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Active Crypto Payment',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: context.textPrimary,
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
                   ),
@@ -481,7 +473,7 @@ class _CryptoPaymentPanel extends StatelessWidget {
             payment.isFinished
                 ? 'Payment confirmed. Tap refresh if premium access has not appeared yet.'
                 : 'Send the exact amount using USDT on BSC/BEP20 only. Do not send on ERC20 or TRC20.',
-            style: const TextStyle(color: Colors.white70),
+            style: TextStyle(color: context.textSecondary),
           ),
           const SizedBox(height: 18),
           Wrap(
@@ -496,10 +488,10 @@ class _CryptoPaymentPanel extends StatelessWidget {
           if (payment.payAddress != null &&
               payment.payAddress!.isNotEmpty) ...<Widget>[
             const SizedBox(height: 18),
-            const Text(
+            Text(
               'Wallet Address',
               style: TextStyle(
-                color: Colors.white,
+                color: context.textPrimary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -508,13 +500,13 @@ class _CryptoPaymentPanel extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: const Color(0xFF0B111C),
+                color: context.elevatedBg,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFF243247)),
+                border: Border.all(color: context.borderCol),
               ),
               child: SelectableText(
                 payment.payAddress!,
-                style: const TextStyle(color: Colors.white70),
+                style: TextStyle(color: context.textPrimary),
               ),
             ),
           ],
@@ -574,23 +566,23 @@ class _InfoTile extends StatelessWidget {
       width: 180,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF0B111C),
+        color: context.elevatedBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF243247)),
+        border: Border.all(color: context.borderCol),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: const TextStyle(color: Colors.white54, fontSize: 12),
+            style: TextStyle(color: context.textSecondary, fontSize: 12),
           ),
           const SizedBox(height: 6),
           valueWidget ??
               Text(
                 value ?? '',
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: context.textPrimary,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -654,9 +646,11 @@ class _PlanCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFF101826),
+        color: context.surfaceBg,
         borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: accent.withValues(alpha: 0.34)),
+        border: Border.all(
+          color: accent.withValues(alpha: context.isDark ? 0.34 : 0.45),
+        ),
         boxShadow: <BoxShadow>[
           BoxShadow(
             color: accent.withValues(alpha: 0.10),
@@ -680,11 +674,17 @@ class _PlanCard extends StatelessWidget {
             priceLabel,
             style: Theme.of(
               context,
-            ).textTheme.displaySmall?.copyWith(fontWeight: FontWeight.w800),
+            ).textTheme.displaySmall?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: context.textPrimary,
+            ),
           ),
           if (plan.description.isNotEmpty) ...<Widget>[
             const SizedBox(height: 12),
-            Text(plan.description),
+            Text(
+              plan.description,
+              style: TextStyle(color: context.textSecondary),
+            ),
           ],
           const SizedBox(height: 18),
           for (final String feature in plan.features) ...<Widget>[
@@ -693,7 +693,12 @@ class _PlanCard extends StatelessWidget {
               children: <Widget>[
                 Icon(Icons.check_circle, color: accent, size: 18),
                 const SizedBox(width: 10),
-                Expanded(child: Text(feature)),
+                Expanded(
+                  child: Text(
+                    feature,
+                    style: TextStyle(color: context.textPrimary),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 12),

@@ -20,58 +20,68 @@ class ApiService {
       return videos;
     }
 
-    final videoRows = videos.whereType<Map<String, dynamic>>().toList(
-      growable: false,
-    );
-    final videoIds = videoRows
-        .map((video) => video['id'] as String?)
-        .whereType<String>()
-        .toList(growable: false);
+    try {
+      final videoRows = videos
+          .map((v) => v is Map ? Map<String, dynamic>.from(v) : null)
+          .whereType<Map<String, dynamic>>()
+          .toList(growable: false);
+      final videoIds = videoRows
+          .map((video) => video['id']?.toString())
+          .whereType<String>()
+          .where((id) => id.isNotEmpty)
+          .toList(growable: false);
 
-    if (videoIds.isEmpty) {
+      if (videoIds.isEmpty) {
+        return videos;
+      }
+
+      final ratingsData = await _supabase
+          .from('video_ratings')
+          .select('video_id, rating')
+          .inFilter('video_id', videoIds);
+
+      final ratingsByVideo = <String, List<double>>{};
+      if (ratingsData is List) {
+        for (final item in ratingsData) {
+          if (item is! Map) continue;
+          final row = Map<String, dynamic>.from(item);
+          final videoId = row['video_id']?.toString();
+          final rating = (row['rating'] as num?)?.toDouble();
+          if (videoId == null || rating == null) {
+            continue;
+          }
+          ratingsByVideo.putIfAbsent(videoId, () => <double>[]).add(rating);
+        }
+      }
+
+      return videoRows
+          .map((video) {
+            final videoId = video['id']?.toString();
+            if (videoId == null) {
+              return video;
+            }
+
+            final ratings = ratingsByVideo[videoId];
+            if (ratings == null || ratings.isEmpty) {
+              return {...video, 'rating': 0.0, 'rating_count': 0};
+            }
+
+            final total = ratings.fold<double>(0, (sum, value) => sum + value);
+            final average = double.parse(
+              (total / ratings.length).toStringAsFixed(1),
+            );
+
+            return {...video, 'rating': average, 'rating_count': ratings.length};
+          })
+          .toList(growable: false);
+    } catch (e) {
+      // Fallback: If rating query or calculation fails, return raw videos
       return videos;
     }
-
-    final ratingsData = await _supabase
-        .from('video_ratings')
-        .select('video_id, rating')
-        .inFilter('video_id', videoIds);
-
-    final ratingsByVideo = <String, List<double>>{};
-    for (final item in ratingsData as List<dynamic>) {
-      final row = item as Map<String, dynamic>;
-      final videoId = row['video_id'] as String?;
-      final rating = (row['rating'] as num?)?.toDouble();
-      if (videoId == null || rating == null) {
-        continue;
-      }
-      ratingsByVideo.putIfAbsent(videoId, () => <double>[]).add(rating);
-    }
-
-    return videoRows
-        .map((video) {
-          final videoId = video['id'] as String?;
-          if (videoId == null) {
-            return video;
-          }
-
-          final ratings = ratingsByVideo[videoId];
-          if (ratings == null || ratings.isEmpty) {
-            return {...video, 'rating': 0.0, 'rating_count': 0};
-          }
-
-          final total = ratings.fold<double>(0, (sum, value) => sum + value);
-          final average = double.parse(
-            (total / ratings.length).toStringAsFixed(1),
-          );
-
-          return {...video, 'rating': average, 'rating_count': ratings.length};
-        })
-        .toList(growable: false);
   }
 
   Future<dynamic> _mergeVideoRatingStatsIntoItem(dynamic video) async {
-    if (video is! Map<String, dynamic>) {
+    if (video is! Map) {
       return video;
     }
 
@@ -163,7 +173,10 @@ class ApiService {
       final response = await _httpClient.get(AppConstants.userProfileEndpoint);
 
       if (response.statusCode == 200 && response.data != null) {
-        return UserModel.fromJson(response.data as Map<String, dynamic>);
+        final data = response.data;
+        if (data is Map) {
+          return UserModel.fromJson(data);
+        }
       }
       throw ServerException(
         'Failed to fetch profile',
@@ -184,9 +197,10 @@ class ApiService {
       );
 
       if (response.statusCode == 200 && response.data != null) {
-        return AuthResponseModel.fromJson(
-          response.data as Map<String, dynamic>,
-        );
+        final data = response.data;
+        if (data is Map) {
+          return AuthResponseModel.fromJson(data);
+        }
       }
       throw ServerException('Token refresh failed', response.statusCode ?? 500);
     } on AppException {
@@ -260,7 +274,8 @@ class ApiService {
           .range(offset, offset + limit - 1);
 
       return (data as List<dynamic>)
-          .map((item) => _withSeriesCounts(item as Map<String, dynamic>))
+          .whereType<Map>()
+          .map((item) => _withSeriesCounts(item))
           .toList(growable: false);
     } catch (e) {
       throw UnknownException(e.toString());
@@ -275,7 +290,7 @@ class ApiService {
           .eq('id', seriesId)
           .maybeSingle();
 
-      if (data == null) {
+      if (data == null || data is! Map) {
         return null;
       }
 
@@ -294,7 +309,8 @@ class ApiService {
           .order('season_number', ascending: true);
 
       return (data as List<dynamic>)
-          .map((item) => _withSeasonEpisodeCount(item as Map<String, dynamic>))
+          .whereType<Map>()
+          .map((item) => _withSeasonEpisodeCount(item))
           .toList(growable: false);
     } catch (e) {
       throw UnknownException(e.toString());
@@ -394,9 +410,14 @@ class ApiService {
     }
   }
 
-  Map<String, dynamic> _withSeriesCounts(Map<String, dynamic> item) {
-    final seasons = item['series_seasons'] as List<dynamic>? ?? const [];
-    final episodes = item['series_episodes'] as List<dynamic>? ?? const [];
+  Map<String, dynamic> _withSeriesCounts(Map<dynamic, dynamic> rawItem) {
+    final item = Map<String, dynamic>.from(rawItem);
+    final seasons = item['series_seasons'] is List
+        ? (item['series_seasons'] as List)
+        : const [];
+    final episodes = item['series_episodes'] is List
+        ? (item['series_episodes'] as List)
+        : const [];
 
     return {
       ...item,
@@ -405,8 +426,11 @@ class ApiService {
     };
   }
 
-  Map<String, dynamic> _withSeasonEpisodeCount(Map<String, dynamic> item) {
-    final episodes = item['series_episodes'] as List<dynamic>? ?? const [];
+  Map<String, dynamic> _withSeasonEpisodeCount(Map<dynamic, dynamic> rawItem) {
+    final item = Map<String, dynamic>.from(rawItem);
+    final episodes = item['series_episodes'] is List
+        ? (item['series_episodes'] as List)
+        : const [];
 
     return {...item, 'episode_count': episodes.length};
   }

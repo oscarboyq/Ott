@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:video/app/theme/app_theme.dart';
 import 'package:video/core/models/video_model.dart';
 import 'package:video/core/providers/auth_provider.dart';
+import 'package:video/core/providers/theme_provider.dart';
 import 'package:video/core/providers/video_catalog_provider.dart';
 import 'package:video/core/providers/video_rating_provider.dart';
 import 'package:video/core/providers/watch_history_provider.dart';
@@ -301,29 +303,35 @@ class _ReelsPageState extends ConsumerState<ReelsPage> {
     final isPremiumUser = authState.user?.isPremium == true;
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: context.scaffoldBg,
       body: reelsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const Center(
+          child: CircularProgressIndicator(color: Color(0xFFF05454)),
+        ),
         error: (error, _) => Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(
+                Icon(
                   Icons.error_outline,
-                  color: Colors.white54,
+                  color: context.textMuted,
                   size: 48,
                 ),
                 const SizedBox(height: 16),
                 Text(
                   error.toString(),
-                  style: const TextStyle(color: Colors.white70),
+                  style: TextStyle(color: context.textSecondary),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
                 FilledButton(
                   onPressed: () => ref.invalidate(reelsCatalogProvider),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFF05454),
+                    foregroundColor: Colors.white,
+                  ),
                   child: const Text('Retry'),
                 ),
               ],
@@ -340,29 +348,40 @@ class _ReelsPageState extends ConsumerState<ReelsPage> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.video_collection_outlined,
-                      color: Colors.white38,
+                      color: context.textMuted,
                       size: 56,
                     ),
                     const SizedBox(height: 16),
-                    const Text(
+                    Text(
                       'No reels yet',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: context.textPrimary,
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
+                    Text(
                       'Add reel content from the admin panel to populate this feed.',
-                      style: TextStyle(color: Colors.white54),
+                      style: TextStyle(color: context.textSecondary),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 20),
                     OutlinedButton(
                       onPressed: () => context.go('/'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: context.textPrimary,
+                        side: BorderSide(color: context.borderCol),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
                       child: const Text('Back to Home'),
                     ),
                   ],
@@ -474,8 +493,10 @@ class _ReelsPageState extends ConsumerState<ReelsPage> {
                           context.go('/');
                         },
                         style: IconButton.styleFrom(
-                          backgroundColor: Colors.black45,
-                          foregroundColor: Colors.white,
+                          backgroundColor: context.isDark
+                              ? Colors.black54
+                              : Colors.white.withValues(alpha: 0.9),
+                          foregroundColor: context.textPrimary,
                         ),
                         icon: const Icon(Icons.arrow_back_rounded),
                       ),
@@ -486,18 +507,22 @@ class _ReelsPageState extends ConsumerState<ReelsPage> {
                           vertical: 9,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.black45,
+                          color: context.isDark
+                              ? Colors.black54
+                              : Colors.white.withValues(alpha: 0.9),
                           borderRadius: BorderRadius.circular(999),
-                          border: Border.all(color: Colors.white24),
+                          border: Border.all(color: context.borderCol),
                         ),
                         child: Text(
                           'Reels ${_currentIndex + 1}/${reels.length}',
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: context.textPrimary,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
+                      const Spacer(),
+                      const ThemeToggleButton(compact: true),
                     ],
                   ),
                 ),
@@ -618,7 +643,9 @@ class _ReelAccessGate extends StatelessWidget {
     ).toString();
 
     return Container(
-      color: const Color(0x88000000),
+      color: context.isDark
+          ? const Color(0x88000000)
+          : Colors.black.withValues(alpha: 0.35),
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Center(
         child: ConstrainedBox(
@@ -626,9 +653,18 @@ class _ReelAccessGate extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: const Color(0xCC070B12),
+              color: context.surfaceBg,
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: const Color(0x33FFFFFF)),
+              border: Border.all(color: context.borderCol),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(
+                    alpha: context.isDark ? 0.4 : 0.15,
+                  ),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+              ],
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -647,10 +683,10 @@ class _ReelAccessGate extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text(
+                Text(
                   'Premium Reel',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: context.textPrimary,
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
                   ),
@@ -661,7 +697,7 @@ class _ReelAccessGate extends StatelessWidget {
                       ? 'Upgrade to Premium to watch this reel.'
                       : 'Sign in and upgrade to Premium to watch this reel.',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70, height: 1.4),
+                  style: TextStyle(color: context.textSecondary, height: 1.4),
                 ),
                 const SizedBox(height: 18),
                 SizedBox(
@@ -697,7 +733,10 @@ class _ReelAccessGate extends StatelessWidget {
                       );
                       context.go(registerUri.toString());
                     },
-                    child: const Text('Create Account'),
+                    child: Text(
+                      'Create Account',
+                      style: TextStyle(color: context.textPrimary),
+                    ),
                   ),
                 ],
               ],
@@ -717,22 +756,22 @@ class _PosterBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: Colors.black,
+      color: context.scaffoldBg,
       child: reel.thumbnailUrl.isEmpty
-          ? const Center(
+          ? Center(
               child: Icon(
                 Icons.video_collection_outlined,
-                color: Colors.white24,
+                color: context.textMuted,
                 size: 80,
               ),
             )
           : Image.network(
               reel.thumbnailUrl,
               fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => const Center(
+              errorBuilder: (_, _, _) => Center(
                 child: Icon(
                   Icons.broken_image_outlined,
-                  color: Colors.white24,
+                  color: context.textMuted,
                   size: 80,
                 ),
               ),

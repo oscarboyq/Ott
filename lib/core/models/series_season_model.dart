@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:video/core/utils/safe_type_parsers.dart';
 
 class SeriesSeasonModel extends Equatable {
   const SeriesSeasonModel({
@@ -25,32 +26,29 @@ class SeriesSeasonModel extends Equatable {
   final DateTime? releaseDate;
   final int episodeCount;
 
-  factory SeriesSeasonModel.fromJson(Map<String, dynamic> json) {
+  factory SeriesSeasonModel.fromJson(Map<dynamic, dynamic> rawJson) {
+    final json = Map<String, dynamic>.from(rawJson);
     return SeriesSeasonModel(
-      id: json['id'] as String,
-      seriesId: (json['series_id'] ?? json['seriesId']) as String,
-      seasonNumber:
-          (json['season_number'] ?? json['seasonNumber']) as int? ?? 1,
-      title: json['title'] as String? ?? '',
-      description: json['description'] as String? ?? '',
-      posterUrl: (json['poster_url'] ?? json['posterUrl']) as String? ?? '',
-      createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'] as String)
-          : json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
-          : DateTime.now(),
-      updatedAt: json['updated_at'] != null
-          ? DateTime.parse(json['updated_at'] as String)
-          : json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
-          : DateTime.now(),
-      releaseDate: json['release_date'] != null
-          ? DateTime.parse(json['release_date'] as String)
-          : json['releaseDate'] != null
-          ? DateTime.parse(json['releaseDate'] as String)
-          : null,
-      episodeCount:
-          (json['episode_count'] ?? json['episodeCount']) as int? ?? 0,
+      id: json['id']?.toString() ?? '',
+      seriesId: (json['series_id'] ?? json['seriesId'])?.toString() ?? '',
+      seasonNumber: parseIntSafe(
+        json['season_number'] ?? json['seasonNumber'],
+        1,
+      ),
+      title: json['title']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
+      posterUrl: (json['poster_url'] ?? json['posterUrl'])?.toString() ?? '',
+      createdAt:
+          parseDateTimeSafe(json['created_at'] ?? json['createdAt']),
+      updatedAt:
+          parseDateTimeSafe(json['updated_at'] ?? json['updatedAt']),
+      releaseDate: parseDateTimeNullableSafe(
+        json['release_date'] ?? json['releaseDate'],
+      ),
+      episodeCount: parseIntSafe(
+        json['episode_count'] ?? json['episodeCount'],
+        0,
+      ),
     );
   }
 

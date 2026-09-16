@@ -38,6 +38,9 @@ class WatchHistoryState {
 
 class WatchHistoryNotifier extends StateNotifier<WatchHistoryState> {
   WatchHistoryNotifier(this.ref) : super(const WatchHistoryState()) {
+    // Automatically load cached history on startup so UI reflects it immediately
+    loadHistory();
+
     // React to authentication changes so that history is always
     // consistent with the current user without relying on individual
     // pages calling loadHistory() at the right time.
@@ -82,11 +85,21 @@ class WatchHistoryNotifier extends StateNotifier<WatchHistoryState> {
   Future<void> recordPlayback({
     required VideoModel video,
     required int watchedSeconds,
+    bool allowZeroReset = false,
   }) async {
     final normalizedWatchedSeconds = _normalizeWatchedSeconds(
       watchedSeconds: watchedSeconds,
       totalDurationSeconds: video.duration,
     );
+
+    // Guard: Do not wipe non-zero watched progress if incoming position is 0, unless explicitly resetting
+    if (watchedSeconds == 0 && !allowZeroReset) {
+      final existing = getItemForVideo(video.id);
+      if (existing != null && existing.durationWatchedSeconds > 0) {
+        return;
+      }
+    }
+
     final item = WatchHistoryItemModel(
       id: _uuid.v4(),
       videoId: video.id,
@@ -95,9 +108,14 @@ class WatchHistoryNotifier extends StateNotifier<WatchHistoryState> {
       video: video,
     );
 
+    // Optimistically update in-memory state so UI updates instantly
+    state = state.copyWith(items: _mergeHistoryItem(state.items, item));
+
     try {
       await _saveLocalHistoryItem(item);
+    } catch (_) {}
 
+    try {
       final authState = ref.read(authProvider);
       if (authState.isAuthenticated) {
         final apiService = ref.read(apiServiceProvider);
@@ -106,10 +124,8 @@ class WatchHistoryNotifier extends StateNotifier<WatchHistoryState> {
           durationWatchedSeconds: normalizedWatchedSeconds,
         );
       }
-
-      state = state.copyWith(items: _mergeHistoryItem(state.items, item));
     } catch (e) {
-      state = state.copyWith(errorMessage: e.toString());
+      // Don't lose local state or overwrite error if remote sync fails
     }
   }
 
@@ -117,11 +133,24 @@ class WatchHistoryNotifier extends StateNotifier<WatchHistoryState> {
     required SeriesModel series,
     required SeriesEpisodeModel episode,
     required int watchedSeconds,
+    bool allowZeroReset = false,
   }) async {
-    final clampedWatchedSeconds = watchedSeconds.clamp(0, episode.duration);
+    final clampedWatchedSeconds = episode.duration > 0
+        ? watchedSeconds.clamp(0, episode.duration)
+        : (watchedSeconds > 0 ? watchedSeconds : 0);
     final isCompleted =
         episode.duration > 0 && clampedWatchedSeconds >= episode.duration - 5;
     final normalizedWatchedSeconds = isCompleted ? 0 : clampedWatchedSeconds;
+
+    // Guard: Do not wipe non-zero watched progress if incoming position is 0, unless completed or explicit reset
+    if (watchedSeconds == 0 && !isCompleted && !allowZeroReset) {
+      final cachedItems = await _readLocalSeriesHistoryItems();
+      final existing = cachedItems.where((i) => i.episodeId == episode.id).firstOrNull;
+      if (existing != null && existing.positionSeconds > 0) {
+        return;
+      }
+    }
+
     final authState = ref.read(authProvider);
     final item = SeriesHistoryItemModel(
       id: _uuid.v4(),
@@ -138,7 +167,11 @@ class WatchHistoryNotifier extends StateNotifier<WatchHistoryState> {
 
     try {
       await _saveLocalSeriesHistoryItem(item);
+    } catch (_) {}
 
+    ref.invalidate(seriesHistoryProvider);
+
+    try {
       if (authState.isAuthenticated) {
         final apiService = ref.read(apiServiceProvider);
         await apiService.saveSeriesProgress(
@@ -149,10 +182,8 @@ class WatchHistoryNotifier extends StateNotifier<WatchHistoryState> {
           isCompleted: isCompleted,
         );
       }
-
-      ref.invalidate(seriesHistoryProvider);
     } catch (e) {
-      state = state.copyWith(errorMessage: e.toString());
+      // Don't drop state if remote sync fails
     }
   }
 
@@ -307,11 +338,14 @@ class WatchHistoryNotifier extends StateNotifier<WatchHistoryState> {
     required int watchedSeconds,
     required int totalDurationSeconds,
   }) {
-    final clamped = watchedSeconds.clamp(0, totalDurationSeconds);
-    if (totalDurationSeconds > 0 && clamped >= totalDurationSeconds - 5) {
-      return 0;
+    if (totalDurationSeconds > 0) {
+      final clamped = watchedSeconds.clamp(0, totalDurationSeconds);
+      if (clamped >= totalDurationSeconds - 5) {
+        return 0;
+      }
+      return clamped;
     }
-    return clamped;
+    return watchedSeconds > 0 ? watchedSeconds : 0;
   }
 }
 
@@ -327,6 +361,13 @@ final watchHistoryItemProvider =
           .items
           .where((item) => item.videoId == videoId)
           .firstOrNull;
+    });
+
+final seriesEpisodeHistoryItemProvider =
+    Provider.family<SeriesHistoryItemModel?, String>((ref, episodeId) {
+      final history = ref.watch(seriesHistoryProvider).asData?.value;
+      if (history == null) return null;
+      return history.where((item) => item.episodeId == episodeId).firstOrNull;
     });
 
 final seriesHistoryProvider = FutureProvider<List<SeriesHistoryItemModel>>((

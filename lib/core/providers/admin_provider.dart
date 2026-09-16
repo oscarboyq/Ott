@@ -884,6 +884,75 @@ class AdminNotifier extends StateNotifier<AdminState> {
     }
   }
 
+  /// Creates an episode row immediately using the Bunny playback URL (which is
+  /// known before the upload completes) and marks it as [media_status = uploading].
+  /// Returns the new episode row ID so the caller can later update its status.
+  Future<String> addBunnyEpisodeDraft({
+    required String seriesId,
+    required String seasonId,
+    required int episodeNumber,
+    required String title,
+    required String description,
+    required String thumbnailUrl,
+    required String playbackUrl,
+    required String bunnyVideoId,
+    required bool isFree,
+    required String releaseDate,
+  }) async {
+    try {
+      final inserted = await _db
+          .from('series_episodes')
+          .insert({
+            'series_id': seriesId,
+            'season_id': seasonId,
+            'episode_number': episodeNumber,
+            'title': title.trim(),
+            'description': description.trim(),
+            'thumbnail_url': thumbnailUrl.trim(),
+            'video_url': playbackUrl.trim(),
+            'is_free': isFree,
+            'release_date': releaseDate.trim(),
+            'media_provider': 'bunny',
+            'provider_video_id': bunnyVideoId,
+            'media_status': 'uploading',
+            'processing_progress': 0,
+            'media_error': null,
+          })
+          .select('id')
+          .single();
+      await loadSeries();
+      return inserted['id'] as String;
+    } catch (error, stackTrace) {
+      _logError('addBunnyEpisodeDraft', error, stackTrace);
+      rethrow;
+    }
+  }
+
+  /// Updates the Bunny processing status on an episode row (mirrors
+  /// [updateBunnyMediaStatus] for videos).
+  Future<void> updateBunnyEpisodeStatus({
+    required String id,
+    required String status,
+    int? processingProgress,
+    String? error,
+  }) async {
+    try {
+      await _db
+          .from('series_episodes')
+          .update({
+            'media_status': status,
+            'processing_progress': ?processingProgress,
+            'media_error': error,
+          })
+          .eq('id', id);
+      await loadSeries();
+    } catch (exception, stackTrace) {
+      _logError('updateBunnyEpisodeStatus', exception, stackTrace);
+      rethrow;
+    }
+  }
+
+
   Future<bool> updateEpisode({
     required String id,
     required int episodeNumber,

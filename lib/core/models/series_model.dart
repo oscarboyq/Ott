@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:video/core/utils/safe_type_parsers.dart';
 
 class SeriesModel extends Equatable {
   const SeriesModel({
@@ -41,42 +42,46 @@ class SeriesModel extends Equatable {
   final int seasonCount;
   final int episodeCount;
 
-  factory SeriesModel.fromJson(Map<String, dynamic> json) {
+  factory SeriesModel.fromJson(Map<dynamic, dynamic> rawJson) {
+    final json = Map<String, dynamic>.from(rawJson);
+
+    final bool requiresPremium;
+    if (json.containsKey('requiresPremium') && json['requiresPremium'] != null) {
+      requiresPremium = parseBoolSafe(json['requiresPremium']);
+    } else if (json.containsKey('is_free') && json['is_free'] != null) {
+      requiresPremium = !parseBoolSafe(json['is_free'], false);
+    } else {
+      requiresPremium = true;
+    }
+
     return SeriesModel(
-      id: json['id'] as String,
-      title: json['title'] as String? ?? '',
-      description: json['description'] as String? ?? '',
-      posterUrl: (json['poster_url'] ?? json['posterUrl']) as String? ?? '',
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
+      posterUrl:
+          (json['poster_url'] ?? json['posterUrl'])?.toString() ?? '',
       backdropUrl:
-          (json['backdrop_url'] ?? json['backdropUrl']) as String? ?? '',
-      tagline: json['tagline'] as String? ?? '',
-      genre: (json['category'] ?? json['genre']) as String? ?? 'Series',
-      releaseDate: json['release_date'] != null
-          ? DateTime.parse(json['release_date'] as String)
-          : json['releaseDate'] != null
-          ? DateTime.parse(json['releaseDate'] as String)
-          : DateTime(2000),
-      createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'] as String)
-          : json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
-          : DateTime.now(),
-      updatedAt: json['updated_at'] != null
-          ? DateTime.parse(json['updated_at'] as String)
-          : json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
-          : DateTime.now(),
-      slug: json['slug'] as String?,
-      trailerUrl: (json['trailer_url'] ?? json['trailerUrl']) as String?,
-      isFeatured: json['is_featured'] as bool? ?? false,
-      isPublished: json['is_published'] as bool? ?? true,
-      requiresPremium:
-          json['requiresPremium'] as bool? ??
-          !(json['is_free'] as bool? ?? false),
-      viewCount: (json['views_count'] ?? json['viewCount']) as int? ?? 0,
-      seasonCount: (json['season_count'] ?? json['seasonCount']) as int? ?? 0,
+          (json['backdrop_url'] ?? json['backdropUrl'])?.toString() ?? '',
+      tagline: json['tagline']?.toString() ?? '',
+      genre: (json['category'] ?? json['genre'])?.toString() ?? 'Series',
+      releaseDate: parseDateTimeSafe(
+        json['release_date'] ?? json['releaseDate'],
+        DateTime(2000),
+      ),
+      createdAt: parseDateTimeSafe(json['created_at'] ?? json['createdAt']),
+      updatedAt: parseDateTimeSafe(json['updated_at'] ?? json['updatedAt']),
+      slug: json['slug']?.toString(),
+      trailerUrl: (json['trailer_url'] ?? json['trailerUrl'])?.toString(),
+      isFeatured:
+          parseBoolSafe(json['is_featured'] ?? json['isFeatured'], false),
+      isPublished:
+          parseBoolSafe(json['is_published'] ?? json['isPublished'], true),
+      requiresPremium: requiresPremium,
+      viewCount: parseIntSafe(json['views_count'] ?? json['viewCount'], 0),
+      seasonCount:
+          parseIntSafe(json['season_count'] ?? json['seasonCount'], 0),
       episodeCount:
-          (json['episode_count'] ?? json['episodeCount']) as int? ?? 0,
+          parseIntSafe(json['episode_count'] ?? json['episodeCount'], 0),
     );
   }
 

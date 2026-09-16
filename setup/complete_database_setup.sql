@@ -353,6 +353,12 @@ CREATE TABLE IF NOT EXISTS series_episodes (
     release_date DATE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    -- Bunny Stream media provider fields (mirrors videos table)
+    media_provider TEXT,
+    provider_video_id TEXT,
+    media_status TEXT,
+    processing_progress INTEGER DEFAULT 0,
+    media_error TEXT,
     UNIQUE (season_id, episode_number),
     CHECK (episode_number > 0),
     CHECK (duration_seconds IS NULL OR duration_seconds > 0)
@@ -410,9 +416,12 @@ CREATE TABLE IF NOT EXISTS app_settings (
 ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
 
 -- Anyone can read non-secret settings; only admins manage settings
-CREATE POLICY "Anyone can read non-secret settings"
+DROP POLICY IF EXISTS "Anyone can read non-secret settings" ON app_settings;
+DROP POLICY IF EXISTS "Read public app settings" ON app_settings;
+CREATE POLICY "Read public app settings"
   ON app_settings FOR SELECT
-  USING (is_secret = false);
+  TO anon, authenticated
+  USING (is_secret = false OR is_secret IS NULL);
 
 -- Seed the expected setting keys
 INSERT INTO app_settings (key, value, description, is_secret) VALUES
@@ -423,6 +432,22 @@ INSERT INTO app_settings (key, value, description, is_secret) VALUES
     ('nowpayments_ipn_secret',   '', 'NOWPayments IPN Webhook Secret',        true),
     ('nowpayments_pay_currency', 'usdtbsc', 'Default crypto pay currency',    false),
     ('app_name',                 'ReelHouse', 'Display name of the platform', false),
+    ('app_tagline',              'Stream unlimited movies, series', 'Brand tagline / slogan', false),
+    ('app_logo_url',             '', 'Website Header Navigation Bar Logo URL', false),
+    ('app_favicon_url',          '', 'Browser Tab Favicon URL',               false),
+    ('support_email',            '', 'Customer Care & Support Email',        false),
+    ('terms_url',                '', 'Terms of Service URL',                  false),
+    ('privacy_url',              '', 'Privacy Policy URL',                    false),
+    ('copyright_text',           '© 2026 ReelHouse. All rights reserved.', 'Platform copyright statement', false),
+    ('default_stream_quality',   '720p HD', 'Default streaming quality profile (Legacy fallback)', false),
+    ('free_tier_max_quality',    '720p HD', 'Maximum streaming resolution cap for free-tier viewers', false),
+    ('premium_tier_max_quality', '1080p Full HD', 'Maximum streaming resolution unlocked for VIP subscribers', false),
+    ('buffer_profile',           'Standard (Balanced)', 'Default video buffer & pre-roll strategy', false),
+    ('autoplay_next_episode',    'true', 'Autoplay next episode in series',   false),
+    ('autoplay_hero_trailers',   'true', 'Autoplay featured hero trailers',   false),
+    ('enable_reels',             'true', 'Enable short-form reels feed',      false),
+    ('enable_reviews',           'true', 'Enable audience reviews & ratings', false),
+    ('platform_notice',          '', 'Global announcement notice banner',     false),
     ('setup_completed',          'false', 'Has initial setup been done',      false)
 ON CONFLICT (key) DO NOTHING;
 
@@ -431,23 +456,31 @@ ON CONFLICT (key) DO NOTHING;
 -- ============================================================
 CREATE OR REPLACE FUNCTION public.is_current_user_admin()
 RETURNS BOOLEAN
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
-SET search_path = ''
-AS $fn$
-  SELECT EXISTS (
-    SELECT 1 FROM public.user_profiles
-    WHERE id = auth.uid() AND is_admin = true
-  );
-$fn$;
+SET search_path = public, auth
+AS $$
+DECLARE
+  _is_admin BOOLEAN;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RETURN false;
+  END IF;
 
-REVOKE ALL ON FUNCTION public.is_current_user_admin() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.is_current_user_admin() TO authenticated;
+  SELECT is_admin INTO _is_admin
+  FROM public.user_profiles
+  WHERE id = auth.uid();
+
+  RETURN COALESCE(_is_admin, false);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.is_current_user_admin() TO anon, authenticated;
 
 CREATE POLICY "Admins can view all profiles" ON user_profiles FOR SELECT
   TO authenticated
-  USING (public.is_current_user_admin());
+  USING ((auth.uid() != id) AND public.is_current_user_admin());
 
 -- Clients may edit normal profile fields, never authorization fields.
 REVOKE ALL ON TABLE public.user_profiles FROM anon;
@@ -509,16 +542,22 @@ GRANT EXECUTE ON FUNCTION public.admin_set_user_admin(UUID, BOOLEAN)
 
 -- ── Admin RLS policies for content management ───────────────
 CREATE POLICY "Admins manage videos" ON videos FOR ALL
+  TO authenticated
   USING (public.is_current_user_admin()) WITH CHECK (public.is_current_user_admin());
 CREATE POLICY "Admins manage series" ON series FOR ALL
+  TO authenticated
   USING (public.is_current_user_admin()) WITH CHECK (public.is_current_user_admin());
 CREATE POLICY "Admins manage series seasons" ON series_seasons FOR ALL
+  TO authenticated
   USING (public.is_current_user_admin()) WITH CHECK (public.is_current_user_admin());
 CREATE POLICY "Admins manage series episodes" ON series_episodes FOR ALL
+  TO authenticated
   USING (public.is_current_user_admin()) WITH CHECK (public.is_current_user_admin());
 CREATE POLICY "Admins manage subscription plans" ON subscription_plans FOR ALL
+  TO authenticated
   USING (public.is_current_user_admin()) WITH CHECK (public.is_current_user_admin());
 CREATE POLICY "Admins manage app settings" ON app_settings FOR ALL
+  TO authenticated
   USING (public.is_current_user_admin()) WITH CHECK (public.is_current_user_admin());
 
 -- ── Storage bucket and policies for admin image uploads ─────
@@ -663,8 +702,10 @@ CREATE POLICY "Admins manage app settings" ON public.app_settings FOR ALL
 GRANT SELECT ON public.app_settings TO anon, authenticated;
 REVOKE TRUNCATE ON public.app_settings FROM anon, authenticated;
 DROP POLICY IF EXISTS "Read installation status" ON public.app_settings;
-CREATE POLICY "Read installation status" ON public.app_settings
-  FOR SELECT TO anon, authenticated USING (key = 'setup_completed');
+DROP POLICY IF EXISTS "Read public app settings" ON public.app_settings;
+CREATE POLICY "Read public app settings" ON public.app_settings
+  FOR SELECT TO anon, authenticated
+  USING (is_secret = false OR is_secret IS NULL);
 
 -- Restrictive policies also constrain the existing broad admin ALL policy.
 DROP POLICY IF EXISTS "Protect installation update" ON public.app_settings;

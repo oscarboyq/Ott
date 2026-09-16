@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:video/core/utils/safe_type_parsers.dart';
 
 class SeriesWatchProgressModel extends Equatable {
   const SeriesWatchProgressModel({
@@ -25,26 +26,27 @@ class SeriesWatchProgressModel extends Equatable {
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  factory SeriesWatchProgressModel.fromJson(Map<String, dynamic> json) {
+  factory SeriesWatchProgressModel.fromJson(Map<dynamic, dynamic> rawJson) {
+    final json = Map<String, dynamic>.from(rawJson);
     return SeriesWatchProgressModel(
-      id: json['id'] as String,
-      userId: (json['user_id'] ?? json['userId']) as String,
-      seriesId: (json['series_id'] ?? json['seriesId']) as String,
-      seasonId: (json['season_id'] ?? json['seasonId']) as String,
-      episodeId: (json['episode_id'] ?? json['episodeId']) as String,
-      positionSeconds:
-          (json['position_seconds'] ?? json['positionSeconds']) as int? ?? 0,
-      isCompleted:
-          (json['is_completed'] ?? json['isCompleted']) as bool? ?? false,
-      lastWatchedAt: DateTime.parse(
-        (json['last_watched_at'] ?? json['lastWatchedAt']) as String,
+      id: json['id']?.toString() ?? '',
+      userId: (json['user_id'] ?? json['userId'])?.toString() ?? '',
+      seriesId: (json['series_id'] ?? json['seriesId'])?.toString() ?? '',
+      seasonId: (json['season_id'] ?? json['seasonId'])?.toString() ?? '',
+      episodeId: (json['episode_id'] ?? json['episodeId'])?.toString() ?? '',
+      positionSeconds: parseIntSafe(
+        json['position_seconds'] ?? json['positionSeconds'],
+        0,
       ),
-      createdAt: DateTime.parse(
-        (json['created_at'] ?? json['createdAt']) as String,
+      isCompleted: parseBoolSafe(
+        json['is_completed'] ?? json['isCompleted'],
+        false,
       ),
-      updatedAt: DateTime.parse(
-        (json['updated_at'] ?? json['updatedAt']) as String,
+      lastWatchedAt: parseDateTimeSafe(
+        json['last_watched_at'] ?? json['lastWatchedAt'],
       ),
+      createdAt: parseDateTimeSafe(json['created_at'] ?? json['createdAt']),
+      updatedAt: parseDateTimeSafe(json['updated_at'] ?? json['updatedAt']),
     );
   }
 

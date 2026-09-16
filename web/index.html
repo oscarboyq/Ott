@@ -23,13 +23,32 @@
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="video">
+  <meta name="apple-mobile-web-app-title" content="ReelHouse">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>video</title>
+  <title>ReelHouse</title>
+  <script>
+    (function() {
+      try {
+        var name = localStorage.getItem('app_branding_name') || 'ReelHouse';
+        var tagline = localStorage.getItem('app_branding_tagline') || '';
+        var favicon = localStorage.getItem('app_branding_favicon') || '';
+        var title = (tagline && tagline.trim().length > 0 && tagline !== 'Curated movies, series, and premium originals in one OTT home' && tagline !== 'Watch Anywhere, Anytime')
+          ? name + ' – ' + tagline
+          : name;
+        document.title = title;
+        if (favicon && favicon.trim().length > 0) {
+          var iconLink = document.querySelector("link[rel='icon']");
+          if (iconLink) {
+            iconLink.href = favicon.trim();
+          }
+        }
+      } catch (_) {}
+    })();
+  </script>
   <link rel="manifest" href="manifest.json">
 
 </head>

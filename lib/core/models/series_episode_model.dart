@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:video/core/utils/safe_type_parsers.dart';
 
 class SeriesEpisodeModel extends Equatable {
   const SeriesEpisodeModel({
@@ -16,6 +17,11 @@ class SeriesEpisodeModel extends Equatable {
     this.releaseDate,
     this.requiresPremium = true,
     this.viewCount = 0,
+    this.mediaProvider,
+    this.providerVideoId,
+    this.mediaStatus,
+    this.processingProgress,
+    this.mediaError,
   });
 
   final String id;
@@ -33,38 +39,65 @@ class SeriesEpisodeModel extends Equatable {
   final bool requiresPremium;
   final int viewCount;
 
-  factory SeriesEpisodeModel.fromJson(Map<String, dynamic> json) {
+  // Bunny Stream media provider fields (mirrors VideoModel)
+  final String? mediaProvider;
+  final String? providerVideoId;
+  final String? mediaStatus;
+  final int? processingProgress;
+  final String? mediaError;
+
+  bool get isBunnyEpisode => mediaProvider == 'bunny';
+
+  factory SeriesEpisodeModel.fromJson(Map<dynamic, dynamic> rawJson) {
+    final json = Map<String, dynamic>.from(rawJson);
+
+    final bool requiresPremium;
+    if (json.containsKey('requiresPremium') && json['requiresPremium'] != null) {
+      requiresPremium = parseBoolSafe(json['requiresPremium']);
+    } else if (json.containsKey('is_free') && json['is_free'] != null) {
+      requiresPremium = !parseBoolSafe(json['is_free'], false);
+    } else {
+      requiresPremium = true;
+    }
+
     return SeriesEpisodeModel(
-      id: json['id'] as String,
-      seriesId: (json['series_id'] ?? json['seriesId']) as String,
-      seasonId: (json['season_id'] ?? json['seasonId']) as String,
-      episodeNumber:
-          (json['episode_number'] ?? json['episodeNumber']) as int? ?? 1,
-      title: json['title'] as String? ?? '',
-      description: json['description'] as String? ?? '',
+      id: json['id']?.toString() ?? '',
+      seriesId:
+          (json['series_id'] ?? json['seriesId'])?.toString() ?? '',
+      seasonId:
+          (json['season_id'] ?? json['seasonId'])?.toString() ?? '',
+      episodeNumber: parseIntSafe(
+        json['episode_number'] ?? json['episodeNumber'],
+        1,
+      ),
+      title: json['title']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
       thumbnailUrl:
-          (json['thumbnail_url'] ?? json['thumbnailUrl']) as String? ?? '',
-      videoUrl: (json['video_url'] ?? json['videoUrl']) as String? ?? '',
-      duration: (json['duration_seconds'] ?? json['duration']) as int? ?? 0,
-      createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'] as String)
-          : json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
-          : DateTime.now(),
-      updatedAt: json['updated_at'] != null
-          ? DateTime.parse(json['updated_at'] as String)
-          : json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
-          : DateTime.now(),
-      releaseDate: json['release_date'] != null
-          ? DateTime.parse(json['release_date'] as String)
-          : json['releaseDate'] != null
-          ? DateTime.parse(json['releaseDate'] as String)
-          : null,
-      requiresPremium:
-          json['requiresPremium'] as bool? ??
-          !(json['is_free'] as bool? ?? false),
-      viewCount: (json['views_count'] ?? json['viewCount']) as int? ?? 0,
+          (json['thumbnail_url'] ?? json['thumbnailUrl'])?.toString() ?? '',
+      videoUrl: (json['video_url'] ?? json['videoUrl'])?.toString() ?? '',
+      duration:
+          parseIntSafe(json['duration_seconds'] ?? json['duration'], 0),
+      createdAt: parseDateTimeSafe(json['created_at'] ?? json['createdAt']),
+      updatedAt: parseDateTimeSafe(json['updated_at'] ?? json['updatedAt']),
+      releaseDate: parseDateTimeNullableSafe(
+        json['release_date'] ?? json['releaseDate'],
+      ),
+      requiresPremium: requiresPremium,
+      viewCount: parseIntSafe(json['views_count'] ?? json['viewCount'], 0),
+      mediaProvider:
+          (json['media_provider'] ?? json['mediaProvider'])?.toString(),
+      providerVideoId:
+          (json['provider_video_id'] ?? json['providerVideoId'])?.toString(),
+      mediaStatus:
+          (json['media_status'] ?? json['mediaStatus'])?.toString(),
+      processingProgress: () {
+        final raw =
+            json['processing_progress'] ?? json['processingProgress'];
+        if (raw == null) return null;
+        return parseIntSafe(raw, 0);
+      }(),
+      mediaError:
+          (json['media_error'] ?? json['mediaError'])?.toString(),
     );
   }
 
@@ -84,7 +117,56 @@ class SeriesEpisodeModel extends Equatable {
       'releaseDate': releaseDate?.toIso8601String(),
       'requiresPremium': requiresPremium,
       'viewCount': viewCount,
+      if (mediaProvider != null) 'mediaProvider': mediaProvider,
+      if (providerVideoId != null) 'providerVideoId': providerVideoId,
+      if (mediaStatus != null) 'mediaStatus': mediaStatus,
+      if (processingProgress != null) 'processingProgress': processingProgress,
+      if (mediaError != null) 'mediaError': mediaError,
     };
+  }
+
+  SeriesEpisodeModel copyWith({
+    String? id,
+    String? seriesId,
+    String? seasonId,
+    int? episodeNumber,
+    String? title,
+    String? description,
+    String? thumbnailUrl,
+    String? videoUrl,
+    int? duration,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    DateTime? releaseDate,
+    bool? requiresPremium,
+    int? viewCount,
+    String? mediaProvider,
+    String? providerVideoId,
+    String? mediaStatus,
+    int? processingProgress,
+    String? mediaError,
+  }) {
+    return SeriesEpisodeModel(
+      id: id ?? this.id,
+      seriesId: seriesId ?? this.seriesId,
+      seasonId: seasonId ?? this.seasonId,
+      episodeNumber: episodeNumber ?? this.episodeNumber,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
+      videoUrl: videoUrl ?? this.videoUrl,
+      duration: duration ?? this.duration,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      releaseDate: releaseDate ?? this.releaseDate,
+      requiresPremium: requiresPremium ?? this.requiresPremium,
+      viewCount: viewCount ?? this.viewCount,
+      mediaProvider: mediaProvider ?? this.mediaProvider,
+      providerVideoId: providerVideoId ?? this.providerVideoId,
+      mediaStatus: mediaStatus ?? this.mediaStatus,
+      processingProgress: processingProgress ?? this.processingProgress,
+      mediaError: mediaError ?? this.mediaError,
+    );
   }
 
   @override
@@ -103,5 +185,10 @@ class SeriesEpisodeModel extends Equatable {
     releaseDate,
     requiresPremium,
     viewCount,
+    mediaProvider,
+    providerVideoId,
+    mediaStatus,
+    processingProgress,
+    mediaError,
   ];
 }

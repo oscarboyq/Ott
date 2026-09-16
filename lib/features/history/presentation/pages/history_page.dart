@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:video/app/theme/app_theme.dart';
 import 'package:video/core/models/series_history_item_model.dart';
 import 'package:video/core/models/watch_history_item_model.dart';
 import 'package:video/core/providers/watch_history_provider.dart';
@@ -65,10 +66,11 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
         historyState.isLoading || seriesHistoryAsync.isLoading;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF070B12),
+      backgroundColor: context.scaffoldBg,
       appBar: AppBar(
         title: const Text('History'),
-        backgroundColor: const Color(0xFF070B12),
+        backgroundColor: context.scaffoldBg,
+        foregroundColor: context.textPrimary,
       ),
       body: isHistoryLoading
           ? const Center(child: CircularProgressIndicator())
@@ -88,17 +90,24 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
                   final item = combinedItems[index];
                   if (item.videoItem != null) {
                     final videoItem = item.videoItem!;
+                    final startParam = videoItem.durationWatchedSeconds > 0
+                        ? '?start=${videoItem.durationWatchedSeconds}'
+                        : '';
                     return _VideoHistoryListCard(
                       item: videoItem,
-                      onTap: () => context.push('/video/${videoItem.videoId}'),
+                      onTap: () =>
+                          context.push('/video/${videoItem.videoId}$startParam'),
                     );
                   }
 
                   final seriesItem = item.seriesItem!;
+                  final startParam = seriesItem.positionSeconds > 0
+                      ? '?start=${seriesItem.positionSeconds}'
+                      : '';
                   return _SeriesHistoryListCard(
                     item: seriesItem,
                     onTap: () => context.push(
-                      '/series/${seriesItem.seriesId}/episode/${seriesItem.episodeId}',
+                      '/series/${seriesItem.seriesId}/episode/${seriesItem.episodeId}$startParam',
                     ),
                   );
                 },
@@ -125,30 +134,30 @@ class _HistoryEmptyState extends StatelessWidget {
               width: 88,
               height: 88,
               decoration: BoxDecoration(
-                color: const Color(0xFF101826),
+                color: context.elevatedBg,
                 borderRadius: BorderRadius.circular(24),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.history_rounded,
-                color: Colors.white70,
+                color: context.textSecondary,
                 size: 40,
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               'No history yet',
               style: TextStyle(
-                color: Colors.white,
+                color: context.textPrimary,
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 10),
-            const Text(
+            Text(
               'Videos, reels, and series episodes you start watching will appear here with resume progress.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white60,
+                color: context.textSecondary,
                 fontSize: 14,
                 height: 1.5,
               ),
@@ -179,9 +188,9 @@ class _VideoHistoryListCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(20),
       child: Ink(
         decoration: BoxDecoration(
-          color: const Color(0xFF101826),
+          color: context.surfaceBg,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFF243247)),
+          border: Border.all(color: context.borderCol),
         ),
         child: Padding(
           padding: const EdgeInsets.all(12),
@@ -197,11 +206,11 @@ class _VideoHistoryListCard extends StatelessWidget {
                     item.video.thumbnailUrl,
                     fit: BoxFit.cover,
                     errorBuilder: (_, _, _) => Container(
-                      color: const Color(0xFF162235),
+                      color: context.elevatedBg,
                       alignment: Alignment.center,
-                      child: const Icon(
+                      child: Icon(
                         Icons.movie_outlined,
-                        color: Colors.white24,
+                        color: context.textMuted,
                         size: 32,
                       ),
                     ),
@@ -217,8 +226,8 @@ class _VideoHistoryListCard extends StatelessWidget {
                       item.video.title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: context.textPrimary,
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                         height: 1.25,
@@ -229,8 +238,8 @@ class _VideoHistoryListCard extends StatelessWidget {
                       item.hasResumePosition
                           ? 'Resume from ${_formatPlaybackTime(item.durationWatchedSeconds)}'
                           : 'Watched to the end. Start again anytime.',
-                      style: const TextStyle(
-                        color: Colors.white60,
+                      style: TextStyle(
+                        color: context.textSecondary,
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
                       ),
@@ -241,7 +250,7 @@ class _VideoHistoryListCard extends StatelessWidget {
                       child: LinearProgressIndicator(
                         value: item.progress,
                         minHeight: 6,
-                        backgroundColor: const Color(0xFF243247),
+                        backgroundColor: context.elevatedBg,
                         valueColor: const AlwaysStoppedAnimation<Color>(
                           Color(0xFFF05454),
                         ),
@@ -250,8 +259,8 @@ class _VideoHistoryListCard extends StatelessWidget {
                     const SizedBox(height: 8),
                     Text(
                       '${_formatPlaybackTime(item.durationWatchedSeconds)} of ${_formatPlaybackTime(item.video.duration)} watched',
-                      style: const TextStyle(
-                        color: Colors.white54,
+                      style: TextStyle(
+                        color: context.textMuted,
                         fontSize: 11,
                       ),
                     ),
@@ -288,9 +297,9 @@ class _SeriesHistoryListCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(20),
       child: Ink(
         decoration: BoxDecoration(
-          color: const Color(0xFF101826),
+          color: context.surfaceBg,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFF243247)),
+          border: Border.all(color: context.borderCol),
         ),
         child: Padding(
           padding: const EdgeInsets.all(12),
@@ -306,11 +315,11 @@ class _SeriesHistoryListCard extends StatelessWidget {
                     thumbnailUrl,
                     fit: BoxFit.cover,
                     errorBuilder: (_, _, _) => Container(
-                      color: const Color(0xFF162235),
+                      color: context.elevatedBg,
                       alignment: Alignment.center,
-                      child: const Icon(
+                      child: Icon(
                         Icons.tv_rounded,
-                        color: Colors.white24,
+                        color: context.textMuted,
                         size: 32,
                       ),
                     ),
@@ -326,8 +335,8 @@ class _SeriesHistoryListCard extends StatelessWidget {
                       item.series.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: context.textPrimary,
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                         height: 1.25,
@@ -338,8 +347,8 @@ class _SeriesHistoryListCard extends StatelessWidget {
                       'Episode ${item.episode.episodeNumber}: ${item.episode.title}',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white70,
+                      style: TextStyle(
+                        color: context.textSecondary,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         height: 1.35,
@@ -348,8 +357,8 @@ class _SeriesHistoryListCard extends StatelessWidget {
                     const SizedBox(height: 8),
                     Text(
                       resumeLabel,
-                      style: const TextStyle(
-                        color: Colors.white60,
+                      style: TextStyle(
+                        color: context.textSecondary,
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
                       ),
@@ -360,7 +369,7 @@ class _SeriesHistoryListCard extends StatelessWidget {
                       child: LinearProgressIndicator(
                         value: item.progress,
                         minHeight: 6,
-                        backgroundColor: const Color(0xFF243247),
+                        backgroundColor: context.elevatedBg,
                         valueColor: const AlwaysStoppedAnimation<Color>(
                           Color(0xFF1F9DCC),
                         ),
@@ -369,8 +378,8 @@ class _SeriesHistoryListCard extends StatelessWidget {
                     const SizedBox(height: 8),
                     Text(
                       '${_formatPlaybackTime(item.positionSeconds)} of ${_formatPlaybackTime(item.episode.duration)} watched',
-                      style: const TextStyle(
-                        color: Colors.white54,
+                      style: TextStyle(
+                        color: context.textMuted,
                         fontSize: 11,
                       ),
                     ),

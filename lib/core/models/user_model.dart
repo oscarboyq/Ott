@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:video/core/utils/safe_type_parsers.dart';
 
 class UserModel extends Equatable {
   final String id;
@@ -21,18 +22,27 @@ class UserModel extends Equatable {
     this.premiumExpiresAt,
   }) : isPremium = isPremium || isAdmin;
 
-  factory UserModel.fromJson(Map<String, dynamic> json) {
+  factory UserModel.fromJson(Map<dynamic, dynamic> rawJson) {
+    final json = Map<String, dynamic>.from(rawJson);
     return UserModel(
-      id: json['id'] as String,
-      email: json['email'] as String,
-      username: json['username'] as String,
-      profileImageUrl: json['profileImageUrl'] as String?,
-      isPremium: json['isPremium'] as bool? ?? false,
-      isAdmin: json['is_admin'] as bool? ?? json['isAdmin'] as bool? ?? false,
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      premiumExpiresAt: json['premiumExpiresAt'] != null
-          ? DateTime.parse(json['premiumExpiresAt'] as String)
-          : null,
+      id: json['id']?.toString() ?? '',
+      email: json['email']?.toString() ?? '',
+      username: (json['username'] ?? json['user_name'])?.toString() ?? '',
+      profileImageUrl:
+          (json['profileImageUrl'] ?? json['profile_image_url'])?.toString(),
+      isPremium: parseBoolSafe(
+        json['isPremium'] ?? json['is_premium'],
+        false,
+      ),
+      isAdmin: parseBoolSafe(
+        json['isAdmin'] ?? json['is_admin'],
+        false,
+      ),
+      createdAt:
+          parseDateTimeSafe(json['createdAt'] ?? json['created_at']),
+      premiumExpiresAt: parseDateTimeNullableSafe(
+        json['premiumExpiresAt'] ?? json['premium_expires_at'],
+      ),
     );
   }
 

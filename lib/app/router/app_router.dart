@@ -140,7 +140,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final videoId = state.pathParameters['videoId'] ?? '';
           final autoPlay = state.uri.queryParameters['autoplay'] == 'true';
-          return VideoDetailsPage(videoId: videoId, autoPlay: autoPlay);
+          final start = int.tryParse(state.uri.queryParameters['start'] ?? '');
+          return VideoDetailsPage(
+            videoId: videoId,
+            autoPlay: autoPlay,
+            initialPositionSeconds: start,
+          );
         },
       ),
       GoRoute(
@@ -155,7 +160,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final seriesId = state.pathParameters['seriesId'] ?? '';
           final episodeId = state.pathParameters['episodeId'] ?? '';
-          return SeriesEpisodePage(seriesId: seriesId, episodeId: episodeId);
+          final start = int.tryParse(state.uri.queryParameters['start'] ?? '');
+          return SeriesEpisodePage(
+            seriesId: seriesId,
+            episodeId: episodeId,
+            initialPositionSeconds: start,
+          );
         },
       ),
       GoRoute(

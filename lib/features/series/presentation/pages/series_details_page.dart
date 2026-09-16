@@ -4,11 +4,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:video/app/theme/app_theme.dart';
 import 'package:video/core/models/series_episode_model.dart';
 import 'package:video/core/models/series_model.dart';
 import 'package:video/core/models/series_season_model.dart';
 import 'package:video/core/models/series_watch_progress_model.dart';
+import 'package:video/core/services/app_settings_service.dart';
 import 'package:video/core/utils/playback_source_resolver.dart';
+import 'package:video/core/providers/auth_provider.dart';
 import 'package:video/core/providers/series_catalog_provider.dart';
 import 'package:video/features/video/presentation/widgets/bunny_web_player.dart';
 import 'package:video_player/video_player.dart';
@@ -32,7 +35,7 @@ class _SeriesDetailsPageState extends ConsumerState<SeriesDetailsPage> {
     final progressAsync = ref.watch(seriesProgressProvider(widget.seriesId));
 
     return Scaffold(
-      backgroundColor: const Color(0xFF070B12),
+      backgroundColor: context.scaffoldBg,
       body: seriesAsync.when(
         data: (series) {
           if (series == null) {
@@ -164,10 +167,10 @@ class _SeriesDetailsContent extends StatelessWidget {
       slivers: [
         SliverAppBar(
           pinned: true,
-          backgroundColor: const Color(0xFF070B12),
+          backgroundColor: context.scaffoldBg,
           expandedHeight: 320,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back_rounded),
+            icon: Icon(Icons.arrow_back_rounded, color: context.textPrimary),
             onPressed: () => Navigator.of(context).maybePop(),
           ),
           flexibleSpace: FlexibleSpaceBar(
@@ -179,16 +182,19 @@ class _SeriesDetailsContent extends StatelessWidget {
                     series.backdropUrl,
                     fit: BoxFit.cover,
                     errorBuilder: (_, _, _) =>
-                        Container(color: const Color(0xFF101826)),
+                        Container(color: context.elevatedBg),
                   )
                 else
-                  Container(color: const Color(0xFF101826)),
-                const DecoratedBox(
+                  Container(color: context.elevatedBg),
+                DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [Color(0x22070B12), Color(0xFF070B12)],
+                      colors: [
+                        context.scaffoldBg.withValues(alpha: 0.1),
+                        context.scaffoldBg,
+                      ],
                     ),
                   ),
                 ),
@@ -221,8 +227,8 @@ class _SeriesDetailsContent extends StatelessWidget {
                       const SizedBox(height: 12),
                       Text(
                         series.title,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: context.textPrimary,
                           fontSize: 34,
                           fontWeight: FontWeight.w800,
                         ),
@@ -247,8 +253,8 @@ class _SeriesDetailsContent extends StatelessWidget {
                         const SizedBox(height: 12),
                         Text(
                           series.tagline,
-                          style: const TextStyle(
-                            color: Colors.white70,
+                          style: TextStyle(
+                            color: context.textSecondary,
                             fontSize: 15,
                           ),
                         ),
@@ -268,8 +274,8 @@ class _SeriesDetailsContent extends StatelessWidget {
               children: [
                 Text(
                   series.description,
-                  style: const TextStyle(
-                    color: Colors.white70,
+                  style: TextStyle(
+                    color: context.textSecondary,
                     fontSize: 15,
                     height: 1.5,
                   ),
@@ -281,9 +287,15 @@ class _SeriesDetailsContent extends StatelessWidget {
                   children: [
                     if (continueEpisode != null)
                       FilledButton.icon(
-                        onPressed: () => context.push(
-                          '/series/${series.id}/episode/${continueEpisode.id}',
-                        ),
+                        onPressed: () {
+                          final startParam =
+                              (progress?.positionSeconds ?? 0) > 0
+                                  ? '?start=${progress!.positionSeconds}'
+                                  : '';
+                          context.push(
+                            '/series/${series.id}/episode/${continueEpisode.id}$startParam',
+                          );
+                        },
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFFF05454),
                           foregroundColor: Colors.white,
@@ -332,10 +344,10 @@ class _SeriesDetailsContent extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Seasons',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: context.textPrimary,
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                   ),
@@ -352,12 +364,17 @@ class _SeriesDetailsContent extends StatelessWidget {
                             style: TextStyle(
                               color: season.id == selectedSeason?.id
                                   ? Colors.white
-                                  : Colors.white70,
+                                  : context.textPrimary,
                             ),
                           ),
                           selected: season.id == selectedSeason?.id,
                           selectedColor: const Color(0xFFF05454),
-                          backgroundColor: const Color(0xFF162235),
+                          backgroundColor: context.elevatedBg,
+                          side: BorderSide(
+                            color: season.id == selectedSeason?.id
+                                ? const Color(0xFFF05454)
+                                : context.borderCol,
+                          ),
                           onSelected: (_) => onSeasonSelected(season),
                         ),
                       )
@@ -374,8 +391,8 @@ class _SeriesDetailsContent extends StatelessWidget {
               selectedSeason == null
                   ? 'Episodes'
                   : 'Season ${selectedSeason!.seasonNumber} Episodes',
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: context.textPrimary,
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
               ),
@@ -395,17 +412,17 @@ class _SeriesDetailsContent extends StatelessWidget {
               padding: const EdgeInsets.all(24),
               child: Text(
                 episodesError!,
-                style: const TextStyle(color: Colors.white54),
+                style: TextStyle(color: context.textMuted),
               ),
             ),
           )
         else if (episodes.isEmpty)
-          const SliverToBoxAdapter(
+          SliverToBoxAdapter(
             child: Padding(
-              padding: EdgeInsets.all(24),
+              padding: const EdgeInsets.all(24),
               child: Text(
                 'No episodes available yet for this season.',
-                style: TextStyle(color: Colors.white54),
+                style: TextStyle(color: context.textMuted),
               ),
             ),
           )
@@ -417,12 +434,16 @@ class _SeriesDetailsContent extends StatelessWidget {
               itemBuilder: (context, index) {
                 final episode = episodes[index];
                 final isInProgress = progress?.episodeId == episode.id;
+                final startParam =
+                    isInProgress && (progress?.positionSeconds ?? 0) > 0
+                        ? '?start=${progress!.positionSeconds}'
+                        : '';
 
                 return _EpisodeTile(
                   episode: episode,
                   isInProgress: isInProgress,
                   onTap: () => context.push(
-                    '/series/${series.id}/episode/${episode.id}',
+                    '/series/${series.id}/episode/${episode.id}$startParam',
                   ),
                 );
               },
@@ -453,13 +474,15 @@ class _EpisodeTile extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: isInProgress
-              ? const Color(0xFF172233)
-              : const Color(0xFF101826),
+              ? (context.isDark
+                  ? const Color(0xFF172233)
+                  : const Color(0xFFEFF6FF))
+              : context.surfaceBg,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
             color: isInProgress
                 ? const Color(0xFFF05454)
-                : const Color(0xFF243247),
+                : context.borderCol,
           ),
         ),
         child: Padding(
@@ -477,20 +500,20 @@ class _EpisodeTile extends StatelessWidget {
                           episode.thumbnailUrl,
                           fit: BoxFit.cover,
                           errorBuilder: (_, _, _) => Container(
-                            color: const Color(0xFF162235),
+                            color: context.elevatedBg,
                             alignment: Alignment.center,
-                            child: const Icon(
+                            child: Icon(
                               Icons.live_tv_rounded,
-                              color: Colors.white30,
+                              color: context.textMuted,
                             ),
                           ),
                         )
                       : Container(
-                          color: const Color(0xFF162235),
+                          color: context.elevatedBg,
                           alignment: Alignment.center,
-                          child: const Icon(
+                          child: Icon(
                             Icons.live_tv_rounded,
-                            color: Colors.white30,
+                            color: context.textMuted,
                           ),
                         ),
                 ),
@@ -504,8 +527,8 @@ class _EpisodeTile extends StatelessWidget {
                       children: [
                         Text(
                           'Episode ${episode.episodeNumber}',
-                          style: const TextStyle(
-                            color: Colors.white60,
+                          style: TextStyle(
+                            color: context.textSecondary,
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
                           ),
@@ -521,8 +544,8 @@ class _EpisodeTile extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(
                       episode.title,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: context.textPrimary,
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                       ),
@@ -534,8 +557,8 @@ class _EpisodeTile extends StatelessWidget {
                           : episode.description,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white54,
+                      style: TextStyle(
+                        color: context.textSecondary,
                         fontSize: 13,
                         height: 1.4,
                       ),
@@ -543,16 +566,16 @@ class _EpisodeTile extends StatelessWidget {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.schedule_rounded,
-                          color: Colors.white38,
+                          color: context.textMuted,
                           size: 14,
                         ),
                         const SizedBox(width: 6),
                         Text(
                           _formatEpisodeDuration(episode.duration),
-                          style: const TextStyle(
-                            color: Colors.white54,
+                          style: TextStyle(
+                            color: context.textMuted,
                             fontSize: 12,
                           ),
                         ),
@@ -589,26 +612,34 @@ class _EpisodeTile extends StatelessWidget {
 }
 
 class _MetaPill extends StatelessWidget {
-  const _MetaPill({required this.label, this.accent = const Color(0xFF243247)});
+  const _MetaPill({required this.label, this.accent});
 
   final String label;
-  final Color accent;
+  final Color? accent;
 
   @override
   Widget build(BuildContext context) {
+    final effectiveAccent = accent ?? context.borderCol;
+    final isCustomAccent = accent != null;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.22),
+        color: isCustomAccent
+            ? effectiveAccent.withValues(alpha: 0.22)
+            : context.elevatedBg,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: accent.withValues(alpha: 0.4)),
+        border: Border.all(
+          color: isCustomAccent
+              ? effectiveAccent.withValues(alpha: 0.4)
+              : context.borderCol,
+        ),
       ),
       child: Text(
         label,
         style: TextStyle(
-          color: accent == const Color(0xFF243247)
-              ? Colors.white70
-              : Colors.white,
+          color: isCustomAccent
+              ? (context.isDark ? Colors.white : effectiveAccent)
+              : context.textSecondary,
           fontSize: 11,
           fontWeight: FontWeight.w700,
         ),
@@ -625,7 +656,7 @@ class _SeriesErrorState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Text(message, style: const TextStyle(color: Colors.white54)),
+      child: Text(message, style: TextStyle(color: context.textMuted)),
     );
   }
 }
@@ -638,7 +669,7 @@ void _showSeriesTrailer(
   showDialog<void>(
     context: context,
     builder: (context) => Dialog(
-      backgroundColor: const Color(0xFF0D1520),
+      backgroundColor: context.surfaceBg,
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: ConstrainedBox(
@@ -654,8 +685,8 @@ void _showSeriesTrailer(
                   Expanded(
                     child: Text(
                       '$title Trailer',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: context.textPrimary,
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
                       ),
@@ -663,9 +694,9 @@ void _showSeriesTrailer(
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.close_rounded,
-                      color: Colors.white54,
+                      color: context.textSecondary,
                     ),
                   ),
                 ],
@@ -680,16 +711,16 @@ void _showSeriesTrailer(
   );
 }
 
-class _SeriesTrailerPlayer extends StatefulWidget {
+class _SeriesTrailerPlayer extends ConsumerStatefulWidget {
   const _SeriesTrailerPlayer({required this.videoUrl});
 
   final String videoUrl;
 
   @override
-  State<_SeriesTrailerPlayer> createState() => _SeriesTrailerPlayerState();
+  ConsumerState<_SeriesTrailerPlayer> createState() => _SeriesTrailerPlayerState();
 }
 
-class _SeriesTrailerPlayerState extends State<_SeriesTrailerPlayer> {
+class _SeriesTrailerPlayerState extends ConsumerState<_SeriesTrailerPlayer> {
   VideoPlayerController? _controller;
   String? _errorMessage;
 
@@ -733,11 +764,44 @@ class _SeriesTrailerPlayerState extends State<_SeriesTrailerPlayer> {
   @override
   Widget build(BuildContext context) {
     if (kIsWeb && isBunnyStreamUrl(widget.videoUrl)) {
+      final settings = ref.watch(allSettingsProvider).valueOrNull ?? const {};
+      final authState = ref.watch(authProvider);
+      final isPremiumUser = authState.user?.isPremium == true;
+
+      final freeMaxQuality = settings[SettingKeys.freeTierMaxQuality] ??
+          settings[SettingKeys.defaultStreamQuality] ??
+          '720p HD';
+      final premiumMaxQuality =
+          settings[SettingKeys.premiumTierMaxQuality] ?? '1080p Full HD';
+      final streamQuality = isPremiumUser ? premiumMaxQuality : freeMaxQuality;
+      final bufferProfile = settings[SettingKeys.bufferProfile];
+      final libraryId = settings[SettingKeys.bunnyLibraryId];
+      final pullZone = settings[SettingKeys.bunnyPullZone];
+
+      final directTierUrl = (!isPremiumUser &&
+              !streamQuality.toLowerCase().contains('auto'))
+          ? resolveTierCappedBunnyMediaUrl(
+              videoUrl: widget.videoUrl,
+              libraryId: libraryId,
+              configuredPullZone: pullZone,
+              quality: streamQuality,
+            )
+          : null;
+      final effectivePlayableUrl = directTierUrl ?? widget.videoUrl;
+
       return AspectRatio(
         aspectRatio: 16 / 9,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
-          child: BunnyWebPlayer(videoUrl: widget.videoUrl),
+          child: BunnyWebPlayer(
+            key: ValueKey(
+              'bunny_trailer_${effectivePlayableUrl}_${streamQuality}_${bufferProfile ?? "standard"}_$isPremiumUser',
+            ),
+            videoUrl: effectivePlayableUrl,
+            libraryId: libraryId,
+            bufferProfile: bufferProfile,
+            streamQuality: streamQuality,
+          ),
         ),
       );
     }
@@ -750,7 +814,7 @@ class _SeriesTrailerPlayerState extends State<_SeriesTrailerPlayer> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: ColoredBox(
-          color: const Color(0xFF101826),
+          color: context.elevatedBg,
           child: _errorMessage != null
               ? Center(
                   child: Padding(
@@ -758,7 +822,7 @@ class _SeriesTrailerPlayerState extends State<_SeriesTrailerPlayer> {
                     child: Text(
                       _errorMessage!,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white70),
+                      style: TextStyle(color: context.textSecondary),
                     ),
                   ),
                 )

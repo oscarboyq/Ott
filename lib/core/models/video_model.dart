@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:video/core/utils/safe_type_parsers.dart';
 
 enum VideoQuality { sd, hd, fullHd, fourK }
 
@@ -53,49 +54,63 @@ class VideoModel extends Equatable {
     this.availableQualities,
   });
 
-  factory VideoModel.fromJson(Map<String, dynamic> json) {
+  factory VideoModel.fromJson(Map<dynamic, dynamic> rawJson) {
+    final json = Map<String, dynamic>.from(rawJson);
+
+    final bool requiresPremium;
+    if (json.containsKey('requiresPremium') && json['requiresPremium'] != null) {
+      requiresPremium = parseBoolSafe(json['requiresPremium']);
+    } else if (json.containsKey('is_free') && json['is_free'] != null) {
+      requiresPremium = !parseBoolSafe(json['is_free'], true);
+    } else {
+      requiresPremium = false;
+    }
+
+    List<VideoQuality>? qualities;
+    final qualitiesRaw =
+        json['availableQualities'] ?? json['available_qualities'];
+    if (qualitiesRaw is List) {
+      qualities = [];
+      for (final q in qualitiesRaw) {
+        if (q is String) {
+          try {
+            qualities.add(VideoQuality.values.byName(q));
+          } catch (_) {}
+        }
+      }
+    }
+
     return VideoModel(
-      id: json['id'] as String,
-      title: json['title'] as String,
-      description: json['description'] as String? ?? '',
-      // Supabase returns snake_case column names
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? 'Untitled',
+      description: json['description']?.toString() ?? '',
       thumbnailUrl:
-          (json['thumbnail_url'] ?? json['thumbnailUrl']) as String? ?? '',
-      videoUrl: (json['video_url'] ?? json['videoUrl']) as String? ?? '',
-      // Supabase uses 'category'; legacy JSON uses 'genre'
-      genre: (json['category'] ?? json['genre']) as String? ?? '',
-      rating: ((json['rating'] as num?) ?? 0).toDouble(),
-      ratingCount: (json['rating_count'] ?? json['ratingCount']) as int? ?? 0,
-      // Supabase uses 'duration_seconds'; legacy uses 'duration'
-      duration: (json['duration_seconds'] ?? json['duration']) as int? ?? 0,
-      // Supabase uses 'views_count'; legacy uses 'viewCount'
-      viewCount: (json['views_count'] ?? json['viewCount']) as int? ?? 0,
-      // Supabase uses 'is_free' (free = !requiresPremium)
-      requiresPremium:
-          json['requiresPremium'] as bool? ??
-          !(json['is_free'] as bool? ?? true),
-      isReel: (json['is_reel'] ?? json['isReel']) as bool? ?? false,
-      isFeatured: json['is_featured'] as bool? ?? false,
-      mediaProvider: json['media_provider'] as String? ?? 'external',
-      providerVideoId: json['provider_video_id'] as String?,
-      mediaStatus: json['media_status'] as String? ?? 'ready',
-      processingProgress: json['processing_progress'] as int? ?? 100,
-      mediaError: json['media_error'] as String?,
-      releaseDate: json['release_date'] != null
-          ? DateTime.parse(json['release_date'] as String)
-          : json['releaseDate'] != null
-          ? DateTime.parse(json['releaseDate'] as String)
-          : DateTime(2000),
-      createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'] as String)
-          : json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
-          : DateTime.now(),
-      director: json['director'] as String?,
-      cast: List<String>.from(json['cast'] as List? ?? []),
-      availableQualities: (json['availableQualities'] as List?)
-          ?.map((q) => VideoQuality.values.byName(q as String))
-          .toList(),
+          (json['thumbnail_url'] ?? json['thumbnailUrl'])?.toString() ?? '',
+      videoUrl: (json['video_url'] ?? json['videoUrl'])?.toString() ?? '',
+      genre: (json['category'] ?? json['genre'])?.toString() ?? '',
+      rating: parseDoubleSafe(json['rating'], 0.0),
+      ratingCount:
+          parseIntSafe(json['rating_count'] ?? json['ratingCount'], 0),
+      duration:
+          parseIntSafe(json['duration_seconds'] ?? json['duration'], 0),
+      viewCount: parseIntSafe(json['views_count'] ?? json['viewCount'], 0),
+      requiresPremium: requiresPremium,
+      isReel: parseBoolSafe(json['is_reel'] ?? json['isReel'], false),
+      isFeatured:
+          parseBoolSafe(json['is_featured'] ?? json['isFeatured'], false),
+      mediaProvider: json['media_provider']?.toString() ?? 'external',
+      providerVideoId: json['provider_video_id']?.toString(),
+      mediaStatus: json['media_status']?.toString() ?? 'ready',
+      processingProgress: parseIntSafe(json['processing_progress'], 100),
+      mediaError: json['media_error']?.toString(),
+      releaseDate: parseDateTimeSafe(
+        json['release_date'] ?? json['releaseDate'],
+        DateTime(2000),
+      ),
+      createdAt: parseDateTimeSafe(json['created_at'] ?? json['createdAt']),
+      director: json['director']?.toString(),
+      cast: json['cast'] != null ? parseStringListSafe(json['cast']) : null,
+      availableQualities: qualities,
     );
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video/core/models/video_model.dart';
+import 'package:video/core/providers/auth_provider.dart';
 import 'package:video/core/providers/service_providers.dart';
 
 // Video Catalog State
@@ -40,7 +41,13 @@ class VideoCatalogState {
 }
 
 class VideoCatalogNotifier extends StateNotifier<VideoCatalogState> {
-  VideoCatalogNotifier(this.ref) : super(const VideoCatalogState());
+  VideoCatalogNotifier(this.ref) : super(const VideoCatalogState()) {
+    ref.listen<AuthState>(authProvider, (previous, next) {
+      if (previous?.isAuthenticated != next.isAuthenticated) {
+        loadCatalog(genre: state.selectedGenre);
+      }
+    });
+  }
 
   final Ref ref;
 
@@ -56,7 +63,8 @@ class VideoCatalogNotifier extends StateNotifier<VideoCatalogState> {
       );
 
       final videos = (videosData as Iterable)
-          .map((item) => VideoModel.fromJson(item as Map<String, dynamic>))
+          .whereType<Map>()
+          .map((item) => VideoModel.fromJson(item))
           .toList();
 
       state = state.copyWith(
@@ -87,7 +95,8 @@ class VideoCatalogNotifier extends StateNotifier<VideoCatalogState> {
       );
 
       final newVideos = (videosData as Iterable)
-          .map((item) => VideoModel.fromJson(item as Map<String, dynamic>))
+          .whereType<Map>()
+          .map((item) => VideoModel.fromJson(item))
           .toList();
 
       state = state.copyWith(
@@ -116,7 +125,10 @@ final videoDetailsProvider = FutureProvider.family<VideoModel?, String>((
   final apiService = ref.watch(apiServiceProvider);
   try {
     final videoData = await apiService.getVideoDetails(videoId);
-    return VideoModel.fromJson(videoData as Map<String, dynamic>);
+    if (videoData is Map) {
+      return VideoModel.fromJson(videoData);
+    }
+    return null;
   } catch (e) {
     return null;
   }
@@ -135,7 +147,8 @@ final searchVideosProvider = FutureProvider.family<List<VideoModel>, String>((
       includeReels: false,
     );
     return (videosData as Iterable)
-        .map((item) => VideoModel.fromJson(item as Map<String, dynamic>))
+        .whereType<Map>()
+        .map((item) => VideoModel.fromJson(item))
         .toList();
   } catch (e) {
     return [];
@@ -151,7 +164,8 @@ final reelsCatalogProvider = FutureProvider<List<VideoModel>>((ref) async {
       reelsOnly: true,
     );
     return (videosData as Iterable)
-        .map((item) => VideoModel.fromJson(item as Map<String, dynamic>))
+        .whereType<Map>()
+        .map((item) => VideoModel.fromJson(item))
         .toList();
   } catch (e) {
     return [];

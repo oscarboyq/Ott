@@ -6,14 +6,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
+import 'package:video/app/theme/app_theme.dart';
+import 'package:video/core/constants/app_strings.dart';
 import 'package:video/core/models/series_episode_model.dart';
 import 'package:video/core/models/series_model.dart';
 import 'package:video/core/models/series_season_model.dart';
 import 'package:video/core/models/subscription_plan_model.dart';
 import 'package:video/core/models/video_model.dart';
+import 'package:video/common/widgets/branding_logo.dart';
 import 'package:video/core/providers/admin_provider.dart';
 import 'package:video/core/providers/auth_provider.dart';
+import 'package:video/core/providers/branding_provider.dart';
 import 'package:video/core/providers/service_providers.dart';
+import 'package:video/core/providers/theme_provider.dart';
 import 'package:video/core/services/app_settings_service.dart';
 import 'package:video/core/utils/image_picker_service.dart';
 import 'package:video/core/utils/video_picker_service.dart';
@@ -137,32 +142,40 @@ void _showAdminImageUploadError({
   );
 }
 
-InputDecoration _adminFieldDecoration(String hint) {
+InputDecoration _adminFieldDecoration(String hint, [BuildContext? context]) {
+  final isDark = context?.isDark ?? true;
   return InputDecoration(
     hintText: hint,
-    hintStyle: const TextStyle(color: Colors.white24, fontSize: 14),
+    hintStyle: TextStyle(
+      color: isDark ? Colors.white24 : const Color(0xFF94A3B8),
+      fontSize: 14,
+    ),
     filled: true,
-    fillColor: const Color(0xFF162235),
+    fillColor: isDark ? const Color(0xFF162235) : Colors.white,
     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
     border: OutlineInputBorder(
       borderRadius: BorderRadius.circular(8),
-      borderSide: const BorderSide(color: Color(0xFF243247)),
+      borderSide: BorderSide(
+        color: isDark ? const Color(0xFF243247) : const Color(0xFFCBD5E1),
+      ),
     ),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(8),
-      borderSide: const BorderSide(color: Color(0xFF243247)),
+      borderSide: BorderSide(
+        color: isDark ? const Color(0xFF243247) : const Color(0xFFCBD5E1),
+      ),
     ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
-      borderSide: const BorderSide(color: Color(0xFF1F9DCC)),
+    focusedBorder: const OutlineInputBorder(
+      borderRadius: BorderRadius.all(Radius.circular(8)),
+      borderSide: BorderSide(color: Color(0xFF1F9DCC)),
     ),
-    errorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
-      borderSide: const BorderSide(color: Color(0xFFF05454)),
+    errorBorder: const OutlineInputBorder(
+      borderRadius: BorderRadius.all(Radius.circular(8)),
+      borderSide: BorderSide(color: Color(0xFFF05454)),
     ),
-    focusedErrorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
-      borderSide: const BorderSide(color: Color(0xFFF05454)),
+    focusedErrorBorder: const OutlineInputBorder(
+      borderRadius: BorderRadius.all(Radius.circular(8)),
+      borderSide: BorderSide(color: Color(0xFFF05454)),
     ),
     errorStyle: const TextStyle(color: Color(0xFFF05454), fontSize: 11),
   );
@@ -174,23 +187,34 @@ Widget _adminGenreDropdownField(
   String? Function(String?)? validator,
 }) {
   final genreItems = _genreDropdownItems(ctrl.text);
-  return DropdownButtonFormField<String>(
-    initialValue: _genreDropdownValue(ctrl.text),
-    validator: validator,
-    dropdownColor: const Color(0xFF162235),
-    iconEnabledColor: Colors.white70,
-    style: const TextStyle(color: Colors.white, fontSize: 14),
-    decoration: _adminFieldDecoration(hint),
-    items: genreItems
-        .map(
-          (genre) => DropdownMenuItem<String>(value: genre, child: Text(genre)),
-        )
-        .toList(),
-    onChanged: (value) {
-      if (value == null) {
-        return;
-      }
-      ctrl.text = value;
+  return Builder(
+    builder: (context) {
+      final isDark = context.isDark;
+      return DropdownButtonFormField<String>(
+        initialValue: _genreDropdownValue(ctrl.text),
+        validator: validator,
+        dropdownColor: isDark ? const Color(0xFF162235) : Colors.white,
+        iconEnabledColor: isDark ? Colors.white70 : const Color(0xFF475569),
+        style: TextStyle(color: context.textPrimary, fontSize: 14),
+        decoration: _adminFieldDecoration(hint, context),
+        items: genreItems
+            .map(
+              (genre) => DropdownMenuItem<String>(
+                value: genre,
+                child: Text(
+                  genre,
+                  style: TextStyle(color: context.textPrimary),
+                ),
+              ),
+            )
+            .toList(),
+        onChanged: (value) {
+          if (value == null) {
+            return;
+          }
+          ctrl.text = value;
+        },
+      );
     },
   );
 }
@@ -244,7 +268,7 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
     });
 
     return Scaffold(
-      backgroundColor: const Color(0xFF070B12),
+      backgroundColor: context.scaffoldBg,
       body: Row(
         children: [
           // ── Sidebar ──────────────────────────────────────────────────────
@@ -293,7 +317,7 @@ enum _AdminSection { videos, series, subscriptions, users, settings }
 // SIDEBAR
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _Sidebar extends StatelessWidget {
+class _Sidebar extends ConsumerWidget {
   final _AdminSection selected;
   final String username;
   final ValueChanged<_AdminSection> onSelect;
@@ -307,10 +331,17 @@ class _Sidebar extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final branding = ref.watch(platformBrandingProvider);
+
     return Container(
       width: 220,
-      color: const Color(0xFF0D1520),
+      decoration: BoxDecoration(
+        color: context.sidebarBg,
+        border: Border(
+          right: BorderSide(color: context.borderCol),
+        ),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -320,26 +351,42 @@ class _Sidebar extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
               children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF05454),
-                    borderRadius: BorderRadius.circular(8),
+                if (branding.hasCustomLogo)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: AppBrandingLogo(
+                      logoUrl: branding.logoUrl!,
+                      height: 28,
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      borderRadius: BorderRadius.circular(8),
+                      whiteTile: true,
+                    ),
+                  )
+                else
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF05454),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.play_arrow_rounded,
-                    color: Colors.white,
-                    size: 22,
-                  ),
-                ),
                 const SizedBox(width: 10),
-                const Text(
-                  'StreamOTT',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
+                Expanded(
+                  child: Text(
+                    branding.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: context.textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
               ],
@@ -351,14 +398,14 @@ class _Sidebar extends StatelessWidget {
             child: Text(
               'Admin Panel',
               style: TextStyle(
-                color: Colors.white38,
+                color: context.textSecondary,
                 fontSize: 11,
                 letterSpacing: 1,
               ),
             ),
           ),
           const SizedBox(height: 24),
-          const Divider(color: Color(0xFF1A2840), height: 1),
+          Divider(color: context.borderCol, height: 1),
           const SizedBox(height: 16),
 
           // Nav items
@@ -394,7 +441,7 @@ class _Sidebar extends StatelessWidget {
           ),
 
           const Spacer(),
-          const Divider(color: Color(0xFF1A2840), height: 1),
+          Divider(color: context.borderCol, height: 1),
           const SizedBox(height: 12),
 
           // User info
@@ -406,7 +453,7 @@ class _Sidebar extends StatelessWidget {
                   radius: 14,
                   backgroundColor: const Color(0xFFF05454),
                   child: Text(
-                    username[0].toUpperCase(),
+                    username.isNotEmpty ? username[0].toUpperCase() : 'A',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 12,
@@ -422,8 +469,8 @@ class _Sidebar extends StatelessWidget {
                     children: [
                       Text(
                         username,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: context.textPrimary,
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),
@@ -475,6 +522,7 @@ class _NavItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
@@ -495,13 +543,13 @@ class _NavItem extends StatelessWidget {
             Icon(
               icon,
               size: 18,
-              color: selected ? const Color(0xFFF05454) : Colors.white54,
+              color: selected ? const Color(0xFFF05454) : context.textSecondary,
             ),
             const SizedBox(width: 10),
             Text(
               label,
               style: TextStyle(
-                color: selected ? Colors.white : Colors.white60,
+                color: selected ? const Color(0xFFF05454) : context.textSecondary,
                 fontSize: 14,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
               ),
@@ -534,14 +582,19 @@ class _TopBar extends StatelessWidget {
     };
     return Container(
       height: 64,
-      color: const Color(0xFF0D1520),
+      decoration: BoxDecoration(
+        color: context.topBarBg,
+        border: Border(
+          bottom: BorderSide(color: context.borderCol),
+        ),
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 28),
       child: Row(
         children: [
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: context.textPrimary,
               fontSize: 20,
               fontWeight: FontWeight.w700,
             ),
@@ -556,6 +609,8 @@ class _TopBar extends StatelessWidget {
                 valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFF05454)),
               ),
             ),
+          const Spacer(),
+          const ThemeToggleButton(),
         ],
       ),
     );
@@ -645,26 +700,26 @@ class _SubscriptionsSectionState extends ConsumerState<_SubscriptionsSection> {
                 child: TextField(
                   controller: _searchCtrl,
                   onChanged: (value) => setState(() => _searchQuery = value),
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  style: TextStyle(color: context.textPrimary, fontSize: 14),
                   decoration: InputDecoration(
                     hintText: 'Search plans...',
-                    hintStyle: const TextStyle(
-                      color: Colors.white38,
+                    hintStyle: TextStyle(
+                      color: context.textMuted,
                       fontSize: 14,
                     ),
                     filled: true,
-                    fillColor: const Color(0xFF162235),
+                    fillColor: context.elevatedBg,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 12,
                       vertical: 8,
                     ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFF243247)),
+                      borderSide: BorderSide(color: context.borderCol),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFF243247)),
+                      borderSide: BorderSide(color: context.borderCol),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
@@ -689,9 +744,9 @@ class _SubscriptionsSectionState extends ConsumerState<_SubscriptionsSection> {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: const Color(0xFF0D1520),
+                color: context.surfaceBg,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF1A2840)),
+                border: Border.all(color: context.borderCol),
               ),
               child: Column(
                 children: [
@@ -743,8 +798,8 @@ class _SubscriptionPlansHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
           Expanded(
@@ -752,7 +807,7 @@ class _SubscriptionPlansHeader extends StatelessWidget {
             child: Text(
               'PLAN',
               style: TextStyle(
-                color: Colors.white38,
+                color: context.textMuted,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.8,
@@ -764,7 +819,7 @@ class _SubscriptionPlansHeader extends StatelessWidget {
             child: Text(
               'MONTHLY',
               style: TextStyle(
-                color: Colors.white38,
+                color: context.textMuted,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.8,
@@ -776,7 +831,7 @@ class _SubscriptionPlansHeader extends StatelessWidget {
             child: Text(
               'ANNUAL',
               style: TextStyle(
-                color: Colors.white38,
+                color: context.textMuted,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.8,
@@ -788,7 +843,7 @@ class _SubscriptionPlansHeader extends StatelessWidget {
             child: Text(
               'STATUS',
               style: TextStyle(
-                color: Colors.white38,
+                color: context.textMuted,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.8,
@@ -800,7 +855,7 @@ class _SubscriptionPlansHeader extends StatelessWidget {
             child: Text(
               'ACTIONS',
               style: TextStyle(
-                color: Colors.white38,
+                color: context.textMuted,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.8,
@@ -846,8 +901,8 @@ class _SubscriptionPlanRow extends StatelessWidget {
               children: [
                 Text(
                   plan.name,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: context.textPrimary,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
@@ -855,7 +910,7 @@ class _SubscriptionPlanRow extends StatelessWidget {
                 if (plan.description.isNotEmpty)
                   Text(
                     plan.description,
-                    style: const TextStyle(color: Colors.white38, fontSize: 11),
+                    style: TextStyle(color: context.textMuted, fontSize: 11),
                     overflow: TextOverflow.ellipsis,
                     maxLines: 2,
                   ),
@@ -868,14 +923,14 @@ class _SubscriptionPlanRow extends StatelessWidget {
               plan.monthlyPrice <= 0
                   ? '0.00'
                   : plan.monthlyPrice.toStringAsFixed(2),
-              style: const TextStyle(color: Colors.white70, fontSize: 13),
+              style: TextStyle(color: context.textSecondary, fontSize: 13),
             ),
           ),
           SizedBox(
             width: 120,
             child: Text(
               plan.yearlyPrice <= 0 ? '-' : plan.yearlyPrice.toStringAsFixed(2),
-              style: const TextStyle(color: Colors.white70, fontSize: 13),
+              style: TextStyle(color: context.textSecondary, fontSize: 13),
             ),
           ),
           SizedBox(
@@ -977,7 +1032,7 @@ class _SubscriptionPlanFormDialogState
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: const Color(0xFF0D1520),
+      backgroundColor: context.surfaceBg,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: SizedBox(
         width: 620,
@@ -991,23 +1046,23 @@ class _SubscriptionPlanFormDialogState
               children: [
                 Row(
                   children: [
-                    const Text(
+                    Text(
                       'Edit Subscription Plan',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: context.textPrimary,
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     const Spacer(),
                     IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white54),
+                      icon: Icon(Icons.close, color: context.textSecondary),
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                const Divider(color: Color(0xFF1A2840)),
+                Divider(color: context.borderCol),
                 const SizedBox(height: 16),
                 _FormField(
                   label: 'Plan Name *',
@@ -1098,9 +1153,9 @@ class _SubscriptionPlanFormDialogState
                       onPressed: _isSubmitting
                           ? null
                           : () => Navigator.of(context).pop(),
-                      child: const Text(
+                      child: Text(
                         'Cancel',
-                        style: TextStyle(color: Colors.white54),
+                        style: TextStyle(color: context.textMuted),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -1291,26 +1346,26 @@ class _SeriesSectionState extends ConsumerState<_SeriesSection> {
                 child: TextField(
                   controller: _searchCtrl,
                   onChanged: (value) => setState(() => _searchQuery = value),
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  style: TextStyle(color: context.textPrimary, fontSize: 14),
                   decoration: InputDecoration(
                     hintText: 'Search series...',
-                    hintStyle: const TextStyle(
-                      color: Colors.white38,
+                    hintStyle: TextStyle(
+                      color: context.textMuted,
                       fontSize: 14,
                     ),
                     filled: true,
-                    fillColor: const Color(0xFF162235),
+                    fillColor: context.elevatedBg,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 12,
                       vertical: 8,
                     ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFF243247)),
+                      borderSide: BorderSide(color: context.borderCol),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFF243247)),
+                      borderSide: BorderSide(color: context.borderCol),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
@@ -1350,9 +1405,9 @@ class _SeriesSectionState extends ConsumerState<_SeriesSection> {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: const Color(0xFF0D1520),
+                color: context.surfaceBg,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF1A2840)),
+                border: Border.all(color: context.borderCol),
               ),
               child: Column(
                 children: [
@@ -1449,23 +1504,23 @@ class _SeriesSectionState extends ConsumerState<_SeriesSection> {
   void _confirmDeleteSeries(BuildContext context, SeriesModel series) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF0D1520),
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: dialogCtx.surfaceBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text(
+        title: Text(
           'Delete Series',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: dialogCtx.textPrimary),
         ),
         content: Text(
           'Delete "${series.title}" and all seasons and episodes under it?',
-          style: const TextStyle(color: Colors.white70),
+          style: TextStyle(color: dialogCtx.textSecondary),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text(
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: Text(
               'Cancel',
-              style: TextStyle(color: Colors.white54),
+              style: TextStyle(color: dialogCtx.textMuted),
             ),
           ),
           ElevatedButton(
@@ -1489,8 +1544,8 @@ class _SeriesTableHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
           Expanded(
@@ -1498,7 +1553,7 @@ class _SeriesTableHeader extends StatelessWidget {
             child: Text(
               'TITLE',
               style: TextStyle(
-                color: Colors.white38,
+                color: context.textMuted,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.8,
@@ -1510,7 +1565,7 @@ class _SeriesTableHeader extends StatelessWidget {
             child: Text(
               'GENRE',
               style: TextStyle(
-                color: Colors.white38,
+                color: context.textMuted,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.8,
@@ -1522,7 +1577,7 @@ class _SeriesTableHeader extends StatelessWidget {
             child: Text(
               'STRUCTURE',
               style: TextStyle(
-                color: Colors.white38,
+                color: context.textMuted,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.8,
@@ -1534,7 +1589,7 @@ class _SeriesTableHeader extends StatelessWidget {
             child: Text(
               'ACCESS',
               style: TextStyle(
-                color: Colors.white38,
+                color: context.textMuted,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.8,
@@ -1546,7 +1601,7 @@ class _SeriesTableHeader extends StatelessWidget {
             child: Text(
               'FEATURED',
               style: TextStyle(
-                color: Colors.white38,
+                color: context.textMuted,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.8,
@@ -1558,7 +1613,7 @@ class _SeriesTableHeader extends StatelessWidget {
             child: Text(
               'ACTIONS',
               style: TextStyle(
-                color: Colors.white38,
+                color: context.textMuted,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.8,
@@ -1605,19 +1660,19 @@ class _SeriesRow extends StatelessWidget {
                             series.posterUrl,
                             fit: BoxFit.cover,
                             errorBuilder: (_, _, _) => Container(
-                              color: const Color(0xFF162235),
-                              child: const Icon(
+                              color: context.elevatedBg,
+                              child: Icon(
                                 Icons.live_tv_rounded,
-                                color: Colors.white24,
+                                color: context.textMuted,
                                 size: 20,
                               ),
                             ),
                           )
                         : Container(
-                            color: const Color(0xFF162235),
-                            child: const Icon(
+                            color: context.elevatedBg,
+                            child: Icon(
                               Icons.live_tv_rounded,
-                              color: Colors.white24,
+                              color: context.textMuted,
                               size: 20,
                             ),
                           ),
@@ -1630,8 +1685,8 @@ class _SeriesRow extends StatelessWidget {
                     children: [
                       Text(
                         series.title,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: context.textPrimary,
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                         ),
@@ -1640,8 +1695,8 @@ class _SeriesRow extends StatelessWidget {
                       if (series.tagline.isNotEmpty)
                         Text(
                           series.tagline,
-                          style: const TextStyle(
-                            color: Colors.white38,
+                          style: TextStyle(
+                            color: context.textMuted,
                             fontSize: 11,
                           ),
                           overflow: TextOverflow.ellipsis,
@@ -1656,7 +1711,7 @@ class _SeriesRow extends StatelessWidget {
             flex: 2,
             child: Text(
               series.genre,
-              style: const TextStyle(color: Colors.white60, fontSize: 13),
+              style: TextStyle(color: context.textSecondary, fontSize: 13),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -1664,7 +1719,7 @@ class _SeriesRow extends StatelessWidget {
             width: 120,
             child: Text(
               '${series.seasonCount} seasons / ${series.episodeCount} eps',
-              style: const TextStyle(color: Colors.white60, fontSize: 12),
+              style: TextStyle(color: context.textSecondary, fontSize: 12),
             ),
           ),
           SizedBox(
@@ -1839,26 +1894,26 @@ class _VideosSectionState extends ConsumerState<_VideosSection> {
                 child: TextField(
                   controller: _searchCtrl,
                   onChanged: (v) => setState(() => _searchQuery = v),
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  style: TextStyle(color: context.textPrimary, fontSize: 14),
                   decoration: InputDecoration(
                     hintText: 'Search videos or reels...',
-                    hintStyle: const TextStyle(
-                      color: Colors.white38,
+                    hintStyle: TextStyle(
+                      color: context.textMuted,
                       fontSize: 14,
                     ),
                     filled: true,
-                    fillColor: const Color(0xFF162235),
+                    fillColor: context.elevatedBg,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 12,
                       vertical: 8,
                     ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFF243247)),
+                      borderSide: BorderSide(color: context.borderCol),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFF243247)),
+                      borderSide: BorderSide(color: context.borderCol),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
@@ -1942,9 +1997,9 @@ class _VideosSectionState extends ConsumerState<_VideosSection> {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: const Color(0xFF0D1520),
+                color: context.surfaceBg,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF1A2840)),
+                border: Border.all(color: context.borderCol),
               ),
               child: Column(
                 children: [
@@ -2025,25 +2080,25 @@ class _VideosSectionState extends ConsumerState<_VideosSection> {
     final typeLabel = video.isReel ? 'Reel' : 'Video';
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF0D1520),
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: dialogCtx.surfaceBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: Text(
           'Delete $typeLabel',
-          style: const TextStyle(color: Colors.white),
+          style: TextStyle(color: dialogCtx.textPrimary),
         ),
         content: Text(
           video.mediaProvider == 'bunny'
               ? 'Are you sure you want to delete "${video.title}"? This will permanently delete the video from Bunny Stream hosting, remove custom storage thumbnails, and delete the record.'
               : 'Are you sure you want to delete "${video.title}"? This will remove custom storage thumbnails and delete the record permanently.',
-          style: const TextStyle(color: Colors.white70),
+          style: TextStyle(color: dialogCtx.textSecondary),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text(
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: Text(
               'Cancel',
-              style: TextStyle(color: Colors.white54),
+              style: TextStyle(color: dialogCtx.textMuted),
             ),
           ),
           ElevatedButton(
@@ -2087,9 +2142,9 @@ class _StatCard extends StatelessWidget {
       width: 180,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF0D1520),
+        color: context.surfaceBg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF1A2840)),
+        border: Border.all(color: context.borderCol),
       ),
       child: Row(
         children: [
@@ -2108,15 +2163,15 @@ class _StatCard extends StatelessWidget {
             children: [
               Text(
                 value,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: context.textPrimary,
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
                 ),
               ),
               Text(
                 label,
-                style: const TextStyle(color: Colors.white54, fontSize: 11),
+                style: TextStyle(color: context.textSecondary, fontSize: 11),
               ),
             ],
           ),
@@ -2148,16 +2203,16 @@ class _FilterChipButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected
               ? const Color(0xFF1F9DCC).withValues(alpha: 0.18)
-              : const Color(0xFF162235),
+              : context.elevatedBg,
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
-            color: selected ? const Color(0xFF1F9DCC) : const Color(0xFF243247),
+            color: selected ? const Color(0xFF1F9DCC) : context.borderCol,
           ),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: selected ? Colors.white : Colors.white60,
+            color: selected ? const Color(0xFF1F9DCC) : context.textSecondary,
             fontSize: 12,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
           ),
@@ -2174,24 +2229,24 @@ class _FilterChipButton extends StatelessWidget {
 class _TableHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
           SizedBox(
             width: 60,
             child: Text(
               '',
-              style: TextStyle(color: Colors.white38, fontSize: 12),
+              style: TextStyle(color: context.textMuted, fontSize: 12),
             ),
           ),
-          SizedBox(width: 16),
+          const SizedBox(width: 16),
           Expanded(
             flex: 3,
             child: Text(
               'TITLE',
               style: TextStyle(
-                color: Colors.white38,
+                color: context.textMuted,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.8,
@@ -2203,7 +2258,7 @@ class _TableHeader extends StatelessWidget {
             child: Text(
               'GENRE',
               style: TextStyle(
-                color: Colors.white38,
+                color: context.textMuted,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.8,
@@ -2215,7 +2270,7 @@ class _TableHeader extends StatelessWidget {
             child: Text(
               'CONTENT',
               style: TextStyle(
-                color: Colors.white38,
+                color: context.textMuted,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.8,
@@ -2227,7 +2282,7 @@ class _TableHeader extends StatelessWidget {
             child: Text(
               'MEDIA',
               style: TextStyle(
-                color: Colors.white38,
+                color: context.textMuted,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.8,
@@ -2239,7 +2294,7 @@ class _TableHeader extends StatelessWidget {
             child: Text(
               'ACCESS',
               style: TextStyle(
-                color: Colors.white38,
+                color: context.textMuted,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.8,
@@ -2251,7 +2306,7 @@ class _TableHeader extends StatelessWidget {
             child: Text(
               'FEATURED',
               style: TextStyle(
-                color: Colors.white38,
+                color: context.textMuted,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.8,
@@ -2263,7 +2318,7 @@ class _TableHeader extends StatelessWidget {
             child: Text(
               'ACTIONS',
               style: TextStyle(
-                color: Colors.white38,
+                color: context.textMuted,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.8,
@@ -2313,19 +2368,19 @@ class _VideoRow extends StatelessWidget {
                       video.thumbnailUrl,
                       fit: BoxFit.cover,
                       errorBuilder: (_, _, _) => Container(
-                        color: const Color(0xFF162235),
-                        child: const Icon(
+                        color: context.elevatedBg,
+                        child: Icon(
                           Icons.movie,
-                          color: Colors.white24,
+                          color: context.textMuted,
                           size: 20,
                         ),
                       ),
                     )
                   : Container(
-                      color: const Color(0xFF162235),
-                      child: const Icon(
+                      color: context.elevatedBg,
+                      child: Icon(
                         Icons.movie,
-                        color: Colors.white24,
+                        color: context.textMuted,
                         size: 20,
                       ),
                     ),
@@ -2342,8 +2397,8 @@ class _VideoRow extends StatelessWidget {
               children: [
                 Text(
                   video.title,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: context.textPrimary,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
@@ -2352,7 +2407,7 @@ class _VideoRow extends StatelessWidget {
                 if (video.description.isNotEmpty)
                   Text(
                     video.description,
-                    style: const TextStyle(color: Colors.white38, fontSize: 11),
+                    style: TextStyle(color: context.textMuted, fontSize: 11),
                     overflow: TextOverflow.ellipsis,
                   ),
               ],
@@ -2364,7 +2419,7 @@ class _VideoRow extends StatelessWidget {
             flex: 2,
             child: Text(
               video.genre,
-              style: const TextStyle(color: Colors.white60, fontSize: 13),
+              style: TextStyle(color: context.textSecondary, fontSize: 13),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -2415,7 +2470,7 @@ class _VideoRow extends StatelessWidget {
                     'free-${video.id}-${video.requiresPremium}',
                   ),
                   value: !video.requiresPremium,
-                  onChanged: video.mediaStatus == 'ready' ? onToggleFree : null,
+                  onChanged: onToggleFree,
                   activeThumbColor: const Color(0xFF21A45D),
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
@@ -2437,11 +2492,11 @@ class _VideoRow extends StatelessWidget {
           SizedBox(
             width: 90,
             child: video.isReel
-                ? const Align(
+                ? Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
                       'N/A',
-                      style: TextStyle(color: Colors.white38, fontSize: 12),
+                      style: TextStyle(color: context.textMuted, fontSize: 12),
                     ),
                   )
                 : Switch(
@@ -2449,9 +2504,7 @@ class _VideoRow extends StatelessWidget {
                       'featured-${video.id}-${video.isFeatured}',
                     ),
                     value: video.isFeatured,
-                    onChanged: video.mediaStatus == 'ready'
-                        ? onToggleFeatured
-                        : null,
+                    onChanged: onToggleFeatured,
                     activeThumbColor: const Color(0xFFFFB44C),
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
@@ -2499,13 +2552,13 @@ class _VideoRow extends StatelessWidget {
   }
 }
 
-class _MediaStatusBadge extends StatelessWidget {
+class _MediaStatusBadge extends ConsumerWidget {
   const _MediaStatusBadge({required this.video});
 
   final VideoModel video;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final (label, color, icon) = switch (video.mediaStatus) {
       'creating' => ('CREATING', const Color(0xFFFFB44C), Icons.hourglass_top),
       'uploading' => (
@@ -2514,7 +2567,7 @@ class _MediaStatusBadge extends StatelessWidget {
         Icons.cloud_upload_outlined,
       ),
       'processing' => (
-        '${video.processingProgress}%',
+        video.processingProgress > 0 ? '${video.processingProgress}%' : '0% (PROC)',
         const Color(0xFFFFB44C),
         Icons.settings_outlined,
       ),
@@ -2523,32 +2576,93 @@ class _MediaStatusBadge extends StatelessWidget {
       _ => ('READY', const Color(0xFF21A45D), Icons.check_circle_outline),
     };
 
-    return Tooltip(
-      message: video.mediaError ?? '${video.mediaProvider}: $label',
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: color.withValues(alpha: 0.65)),
+    return PopupMenuButton<String>(
+      tooltip: 'Click to change status (e.g. Mark as Ready)',
+      onSelected: (newStatus) async {
+        final progress = newStatus == 'ready' ? 100 : (newStatus == 'processing' ? 0 : null);
+        await ref.read(adminProvider.notifier).updateBunnyMediaStatus(
+              id: video.id,
+              status: newStatus,
+              processingProgress: progress,
+            );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Video status updated to "$newStatus"'),
+              backgroundColor: newStatus == 'ready'
+                  ? const Color(0xFF21A45D)
+                  : const Color(0xFF1F9DCC),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      },
+      color: context.surfaceBg,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: context.borderCol),
+      ),
+      itemBuilder: (ctx) => [
+        PopupMenuItem(
+          value: 'ready',
+          child: Row(
+            children: [
+              const Icon(Icons.check_circle_outline, size: 16, color: Color(0xFF21A45D)),
+              const SizedBox(width: 8),
+              Text('Mark as Ready', style: TextStyle(color: ctx.textPrimary, fontSize: 12)),
+            ],
+          ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 12, color: color),
-            const SizedBox(width: 5),
-            Flexible(
-              child: Text(
-                label,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
+        PopupMenuItem(
+          value: 'processing',
+          child: Row(
+            children: [
+              const Icon(Icons.settings_outlined, size: 16, color: Color(0xFFFFB44C)),
+              const SizedBox(width: 8),
+              Text('Mark as Processing', style: TextStyle(color: ctx.textPrimary, fontSize: 12)),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'failed',
+          child: Row(
+            children: [
+              const Icon(Icons.error_outline, size: 16, color: Color(0xFFF05454)),
+              const SizedBox(width: 8),
+              Text('Mark as Failed', style: TextStyle(color: ctx.textPrimary, fontSize: 12)),
+            ],
+          ),
+        ),
+      ],
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: color.withValues(alpha: 0.65)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 12, color: color),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(width: 2),
+              Icon(Icons.arrow_drop_down, size: 12, color: color),
+            ],
+          ),
         ),
       ),
     );
@@ -2663,7 +2777,7 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
     final uploadState = ref.watch(mediaUploadControllerProvider);
     final uploadBusy = uploadState.isActive;
     return Dialog(
-      backgroundColor: const Color(0xFF0D1520),
+      backgroundColor: context.surfaceBg,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: SizedBox(
         width: 600,
@@ -2680,15 +2794,15 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                   children: [
                     Text(
                       isEdit ? 'Edit $contentLabel' : 'Add New $contentLabel',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: context.textPrimary,
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     const Spacer(),
                     IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white54),
+                      icon: Icon(Icons.close, color: context.textSecondary),
                       onPressed: uploadBusy
                           ? null
                           : () => Navigator.of(context).pop(),
@@ -2696,7 +2810,7 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                const Divider(color: Color(0xFF1A2840)),
+                Divider(color: context.borderCol),
                 const SizedBox(height: 16),
 
                 if (!isEdit) ...[
@@ -2782,11 +2896,11 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                                     errorBuilder:
                                         (context, error, stackTrace) =>
                                             Container(
-                                      color: const Color(0xFF162235),
+                                      color: context.elevatedBg,
                                       alignment: Alignment.center,
-                                      child: const Text(
+                                      child: Text(
                                         'Thumbnail preview unavailable',
-                                        style: TextStyle(color: Colors.white38),
+                                        style: TextStyle(color: context.textMuted),
                                       ),
                                     ),
                                   ),
@@ -2800,11 +2914,15 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                                         ? null
                                         : _pickAndUploadThumbnail,
                                     icon: _isUploadingThumbnail
-                                        ? const SizedBox(
+                                        ? SizedBox(
                                             width: 16,
                                             height: 16,
                                             child: CircularProgressIndicator(
                                               strokeWidth: 2,
+                                              valueColor:
+                                                  AlwaysStoppedAnimation<Color>(
+                                                context.textPrimary,
+                                              ),
                                             ),
                                           )
                                         : const Icon(Icons.upload_file_outlined),
@@ -2812,11 +2930,16 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                                       _isUploadingThumbnail
                                           ? 'Uploading...'
                                           : 'Change Image',
+                                      style: TextStyle(
+                                        color: context.textPrimary,
+                                      ),
                                     ),
                                     style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.white,
-                                      side: const BorderSide(
-                                        color: Color(0xFF243247),
+                                      foregroundColor: context.textPrimary,
+                                      disabledForegroundColor:
+                                          context.textPrimary,
+                                      side: BorderSide(
+                                        color: context.borderCol,
                                       ),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(8),
@@ -2845,10 +2968,10 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                                 ],
                               ),
                               const SizedBox(height: 6),
-                              const Text(
+                              Text(
                                 'Custom thumbnail will be used. Remove to let Bunny generate the thumbnail automatically.',
                                 style: TextStyle(
-                                  color: Colors.white38,
+                                  color: context.textMuted,
                                   fontSize: 11,
                                 ),
                               ),
@@ -2860,11 +2983,15 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                                         ? null
                                         : _pickAndUploadThumbnail,
                                     icon: _isUploadingThumbnail
-                                        ? const SizedBox(
+                                        ? SizedBox(
                                             width: 16,
                                             height: 16,
                                             child: CircularProgressIndicator(
                                               strokeWidth: 2,
+                                              valueColor:
+                                                  AlwaysStoppedAnimation<Color>(
+                                                context.textPrimary,
+                                              ),
                                             ),
                                           )
                                         : const Icon(Icons.upload_file_outlined),
@@ -2872,11 +2999,16 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                                       _isUploadingThumbnail
                                           ? 'Uploading...'
                                           : 'Pick Image',
+                                      style: TextStyle(
+                                        color: context.textPrimary,
+                                      ),
                                     ),
                                     style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.white,
-                                      side: const BorderSide(
-                                        color: Color(0xFF243247),
+                                      foregroundColor: context.textPrimary,
+                                      disabledForegroundColor:
+                                          context.textPrimary,
+                                      side: BorderSide(
+                                        color: context.borderCol,
                                       ),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(8),
@@ -2886,10 +3018,10 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                                 ],
                               ),
                               const SizedBox(height: 8),
-                              const Text(
+                              Text(
                                 'Optional fallback image. Bunny will generate a thumbnail during processing when no image is uploaded.',
                                 style: TextStyle(
-                                  color: Colors.white38,
+                                  color: context.textMuted,
                                   fontSize: 11,
                                 ),
                               ),
@@ -2919,11 +3051,15 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                                         ? null
                                         : _pickAndUploadThumbnail,
                                     icon: _isUploadingThumbnail
-                                        ? const SizedBox(
+                                        ? SizedBox(
                                             width: 16,
                                             height: 16,
                                             child: CircularProgressIndicator(
                                               strokeWidth: 2,
+                                              valueColor:
+                                                  AlwaysStoppedAnimation<Color>(
+                                                context.textPrimary,
+                                              ),
                                             ),
                                           )
                                         : const Icon(Icons.upload_file_outlined),
@@ -2931,11 +3067,16 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                                       _isUploadingThumbnail
                                           ? 'Uploading...'
                                           : 'Pick Image',
+                                      style: TextStyle(
+                                        color: context.textPrimary,
+                                      ),
                                     ),
                                     style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.white,
-                                      side: const BorderSide(
-                                        color: Color(0xFF243247),
+                                      foregroundColor: context.textPrimary,
+                                      disabledForegroundColor:
+                                          context.textPrimary,
+                                      side: BorderSide(
+                                        color: context.borderCol,
                                       ),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(8),
@@ -2946,10 +3087,10 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                               ],
                             ),
                             const SizedBox(height: 8),
-                            const Text(
+                            Text(
                               'Upload to Supabase Storage or paste a public image URL manually.',
                               style: TextStyle(
-                                color: Colors.white38,
+                                color: context.textMuted,
                                 fontSize: 11,
                               ),
                             ),
@@ -2964,11 +3105,11 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                                     _thumbCtrl.text.trim(),
                                     fit: BoxFit.cover,
                                     errorBuilder: (_, _, _) => Container(
-                                      color: const Color(0xFF162235),
+                                      color: context.elevatedBg,
                                       alignment: Alignment.center,
-                                      child: const Text(
+                                      child: Text(
                                         'Thumbnail preview unavailable',
-                                        style: TextStyle(color: Colors.white38),
+                                        style: TextStyle(color: context.textMuted),
                                       ),
                                     ),
                                   ),
@@ -3078,12 +3219,12 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                             onChanged: (v) =>
                                 setState(() => _isFeatured = v ?? false),
                             activeColor: const Color(0xFFFFB44C),
-                            side: const BorderSide(color: Colors.white38),
+                            side: BorderSide(color: context.borderCol),
                           ),
-                          const Text(
+                          Text(
                             'Featured',
                             style: TextStyle(
-                              color: Colors.white70,
+                              color: context.textSecondary,
                               fontSize: 14,
                             ),
                           ),
@@ -3097,7 +3238,7 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                   _BunnyUploadProgressCard(state: uploadState),
                   const SizedBox(height: 16),
                 ],
-                const Divider(color: Color(0xFF1A2840)),
+                Divider(color: context.borderCol),
                 const SizedBox(height: 16),
 
                 // Actions
@@ -3108,9 +3249,9 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                       onPressed: _isSubmitting || uploadBusy
                           ? null
                           : () => Navigator.of(context).pop(),
-                      child: const Text(
+                      child: Text(
                         'Cancel',
-                        style: TextStyle(color: Colors.white54),
+                        style: TextStyle(color: context.textSecondary),
                       ),
                     ),
                     if (uploadState.stage == MediaUploadStage.uploading) ...[
@@ -3119,6 +3260,10 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                         onPressed: () => ref
                             .read(mediaUploadControllerProvider.notifier)
                             .pause(),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: context.textPrimary,
+                          side: BorderSide(color: context.borderCol),
+                        ),
                         child: const Text('Pause'),
                       ),
                     ],
@@ -3128,6 +3273,10 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                         onPressed: () => ref
                             .read(mediaUploadControllerProvider.notifier)
                             .resume(),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: context.textPrimary,
+                          side: BorderSide(color: context.borderCol),
+                        ),
                         child: const Text('Resume'),
                       ),
                     ],
@@ -3135,6 +3284,10 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
                       const SizedBox(width: 8),
                       OutlinedButton(
                         onPressed: _cancelBunnyUpload,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: context.textPrimary,
+                          side: BorderSide(color: context.borderCol),
+                        ),
                         child: const Text('Cancel Upload'),
                       ),
                     ],
@@ -3196,8 +3349,8 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
       maxLines: maxLines,
       keyboardType: keyboardType,
       validator: validator,
-      style: const TextStyle(color: Colors.white, fontSize: 14),
-      decoration: _adminFieldDecoration(hint),
+      style: TextStyle(color: context.textPrimary, fontSize: 14),
+      decoration: _adminFieldDecoration(hint, context),
     );
   }
 
@@ -3272,13 +3425,23 @@ class _VideoFormDialogState extends ConsumerState<_VideoFormDialog> {
           .read(bunnyStreamServiceProvider)
           .createVideo(title: _titleCtrl.text.trim(), thumbnailTime: 5000);
 
+      if (session.libraryId.isNotEmpty) {
+        unawaited(
+          ref
+              .read(appSettingsServiceProvider)
+              .set(SettingKeys.bunnyLibraryId, session.libraryId),
+        );
+      }
+
       final draftId = await ref
           .read(adminProvider.notifier)
           .addBunnyVideoDraft(
             title: _titleCtrl.text,
             description: _descCtrl.text,
             thumbnailUrl: _thumbCtrl.text,
-            playbackUrl: session.playbackUrl,
+            playbackUrl: session.embedUrl.isNotEmpty
+                ? session.embedUrl
+                : session.playbackUrl,
             bunnyVideoId: session.videoId,
             genre: _genreCtrl.text,
             isFree: _isFree,
@@ -3490,7 +3653,9 @@ class _MediaSourceButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? const Color(0xFFF05454) : Colors.white38;
+    final color = selected
+        ? const Color(0xFFF05454)
+        : (context.isDark ? Colors.white38 : context.textMuted);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(9),
@@ -3500,7 +3665,7 @@ class _MediaSourceButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected
               ? const Color(0xFFF05454).withValues(alpha: 0.12)
-              : const Color(0xFF111B29),
+              : context.surfaceBg,
           borderRadius: BorderRadius.circular(9),
           border: Border.all(color: color),
         ),
@@ -3514,7 +3679,9 @@ class _MediaSourceButton extends StatelessWidget {
                 label,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: selected ? Colors.white : Colors.white60,
+                  color: selected
+                      ? (context.isDark ? Colors.white : const Color(0xFFF05454))
+                      : context.textSecondary,
                   fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                 ),
               ),
@@ -3526,8 +3693,9 @@ class _MediaSourceButton extends StatelessWidget {
   }
 }
 
-class _BunnyVideoPicker extends StatelessWidget {
-  const _BunnyVideoPicker({
+@visibleForTesting
+class BunnyVideoPicker extends StatelessWidget {
+  const BunnyVideoPicker({
     required this.file,
     required this.fileSize,
     required this.error,
@@ -3549,12 +3717,12 @@ class _BunnyVideoPicker extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: const Color(0xFF111B29),
+            color: context.surfaceBg,
             borderRadius: BorderRadius.circular(9),
             border: Border.all(
               color: error != null
                   ? const Color(0xFFF05454)
-                  : const Color(0xFF243247),
+                  : context.borderCol,
             ),
           ),
           child: Row(
@@ -3574,9 +3742,12 @@ class _BunnyVideoPicker extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: file == null
-                    ? const Text(
+                    ? Text(
                         'MP4, MOV, WebM, MKV or AVI',
-                        style: TextStyle(color: Colors.white38, fontSize: 12),
+                        style: TextStyle(
+                          color: context.textMuted,
+                          fontSize: 12,
+                        ),
                       )
                     : Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3585,16 +3756,16 @@ class _BunnyVideoPicker extends StatelessWidget {
                             file!.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: context.textPrimary,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
                           const SizedBox(height: 3),
                           Text(
                             _formatFileSize(fileSize ?? 0),
-                            style: const TextStyle(
-                              color: Colors.white38,
+                            style: TextStyle(
+                              color: context.textMuted,
                               fontSize: 11,
                             ),
                           ),
@@ -3604,6 +3775,13 @@ class _BunnyVideoPicker extends StatelessWidget {
               const SizedBox(width: 12),
               OutlinedButton.icon(
                 onPressed: enabled ? onPick : null,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: context.textPrimary,
+                  side: BorderSide(color: context.borderCol),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
                 icon: const Icon(Icons.folder_open_outlined, size: 17),
                 label: Text(file == null ? 'Select Video' : 'Change'),
               ),
@@ -3618,9 +3796,9 @@ class _BunnyVideoPicker extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 7),
-        const Text(
+        Text(
           'The file uploads directly from this device to Bunny Stream.',
-          style: TextStyle(color: Colors.white38, fontSize: 11),
+          style: TextStyle(color: context.textMuted, fontSize: 11),
         ),
       ],
     );
@@ -3638,8 +3816,11 @@ class _BunnyVideoPicker extends StatelessWidget {
   }
 }
 
-class _BunnyUploadProgressCard extends StatelessWidget {
-  const _BunnyUploadProgressCard({required this.state});
+typedef _BunnyVideoPicker = BunnyVideoPicker;
+
+@visibleForTesting
+class BunnyUploadProgressCard extends StatelessWidget {
+  const BunnyUploadProgressCard({required this.state});
 
   final MediaUploadState state;
 
@@ -3669,7 +3850,7 @@ class _BunnyUploadProgressCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF111B29),
+        color: context.surfaceBg,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: color.withValues(alpha: 0.55)),
       ),
@@ -3691,8 +3872,8 @@ class _BunnyUploadProgressCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   label,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: context.textPrimary,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -3709,14 +3890,14 @@ class _BunnyUploadProgressCard extends StatelessWidget {
             minHeight: 8,
             borderRadius: BorderRadius.circular(8),
             color: color,
-            backgroundColor: const Color(0xFF243247),
+            backgroundColor: context.borderCol,
           ),
           if (state.estimatedRemaining != null &&
               state.stage == MediaUploadStage.uploading) ...[
             const SizedBox(height: 8),
             Text(
               'Estimated time remaining: ${_formatDuration(state.estimatedRemaining!)}',
-              style: const TextStyle(color: Colors.white54, fontSize: 11),
+              style: TextStyle(color: context.textSecondary, fontSize: 11),
             ),
           ],
           if (state.error != null) ...[
@@ -3742,6 +3923,8 @@ class _BunnyUploadProgressCard extends StatelessWidget {
   }
 }
 
+typedef _BunnyUploadProgressCard = BunnyUploadProgressCard;
+
 class _FormField extends StatelessWidget {
   final String label;
   final Widget child;
@@ -3755,8 +3938,8 @@ class _FormField extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            color: Colors.white60,
+          style: TextStyle(
+            color: context.textSecondary,
             fontSize: 12,
             fontWeight: FontWeight.w500,
           ),
@@ -3768,8 +3951,9 @@ class _FormField extends StatelessWidget {
   }
 }
 
-class _AdminImageUploadField extends StatelessWidget {
-  const _AdminImageUploadField({
+@visibleForTesting
+class AdminImageUploadField extends StatelessWidget {
+  const AdminImageUploadField({
     required this.label,
     required this.controller,
     required this.hint,
@@ -3805,16 +3989,25 @@ class _AdminImageUploadField extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: isUploading ? null : onUpload,
                   icon: isUploading
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 16,
                           height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              context.textPrimary,
+                            ),
+                          ),
                         )
                       : const Icon(Icons.upload_file_outlined),
-                  label: Text(isUploading ? 'Uploading...' : 'Pick Image'),
+                  label: Text(
+                    isUploading ? 'Uploading...' : 'Pick Image',
+                    style: TextStyle(color: context.textPrimary),
+                  ),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Color(0xFF243247)),
+                    foregroundColor: context.textPrimary,
+                    disabledForegroundColor: context.textPrimary,
+                    side: BorderSide(color: context.borderCol),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -3824,9 +4017,9 @@ class _AdminImageUploadField extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Upload to Supabase Storage or paste a public image URL manually.',
-            style: TextStyle(color: Colors.white38, fontSize: 11),
+            style: TextStyle(color: context.textMuted, fontSize: 11),
           ),
           ValueListenableBuilder<TextEditingValue>(
             valueListenable: controller,
@@ -3848,11 +4041,11 @@ class _AdminImageUploadField extends StatelessWidget {
                         imageUrl,
                         fit: BoxFit.cover,
                         errorBuilder: (_, _, _) => Container(
-                          color: const Color(0xFF162235),
+                          color: context.elevatedBg,
                           alignment: Alignment.center,
                           child: Text(
                             previewUnavailableText,
-                            style: const TextStyle(color: Colors.white38),
+                            style: TextStyle(color: context.textMuted),
                           ),
                         ),
                       ),
@@ -3867,6 +4060,8 @@ class _AdminImageUploadField extends StatelessWidget {
     );
   }
 }
+
+typedef _AdminImageUploadField = AdminImageUploadField;
 
 mixin _AdminImageUploadStateMixin<T extends StatefulWidget> on State<T> {
   Future<void> uploadImageToController({
@@ -3932,10 +4127,10 @@ class _ToggleChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected
               ? activeColor.withValues(alpha: 0.2)
-              : const Color(0xFF162235),
+              : context.surfaceBg,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: selected ? activeColor : const Color(0xFF243247),
+            color: selected ? activeColor : context.borderCol,
             width: selected ? 1.5 : 1,
           ),
         ),
@@ -3945,13 +4140,13 @@ class _ToggleChip extends StatelessWidget {
             Icon(
               icon,
               size: 14,
-              color: selected ? activeColor : Colors.white38,
+              color: selected ? activeColor : context.textMuted,
             ),
             const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
-                color: selected ? activeColor : Colors.white38,
+                color: selected ? activeColor : context.textMuted,
                 fontSize: 13,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
               ),
@@ -3991,6 +4186,13 @@ class _SeriesFormDialogState extends ConsumerState<_SeriesFormDialog>
   bool _isUploadingPoster = false;
   bool _isUploadingBackdrop = false;
 
+  // Bunny upload state for series trailer
+  _VideoMediaSource _trailerMediaSource = _VideoMediaSource.bunny;
+  XFile? _selectedTrailerVideo;
+  int? _selectedTrailerVideoSize;
+  String? _trailerSelectionError;
+  bool _uploadTerminalStateHandled = false;
+
   @override
   void initState() {
     super.initState();
@@ -4009,6 +4211,10 @@ class _SeriesFormDialogState extends ConsumerState<_SeriesFormDialog>
     );
     _isFree = existing != null ? !existing.requiresPremium : false;
     _isFeatured = existing?.isFeatured ?? false;
+
+    if (existing != null && (existing.trailerUrl ?? '').isNotEmpty) {
+      _trailerMediaSource = _VideoMediaSource.external;
+    }
   }
 
   @override
@@ -4024,12 +4230,171 @@ class _SeriesFormDialogState extends ConsumerState<_SeriesFormDialog>
     super.dispose();
   }
 
+  String _formatError(Object error) {
+    if (error is StorageException) {
+      return 'StorageException: ${error.message}';
+    }
+    if (error is PostgrestException) {
+      return 'PostgrestException: ${error.message}';
+    }
+    if (error is AuthException) {
+      return 'AuthException: ${error.message}';
+    }
+    return '${error.runtimeType}: $error';
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: const Color(0xFFF05454),
+        duration: const Duration(seconds: 6),
+      ),
+    );
+  }
+
+  Future<void> _pickTrailerVideo() async {
+    try {
+      final file = await pickVideoFile();
+      if (file == null) return;
+
+      final size = await file.length();
+      if (!mounted) return;
+      setState(() {
+        _selectedTrailerVideo = file;
+        _selectedTrailerVideoSize = size;
+        _trailerSelectionError = null;
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _trailerSelectionError = 'Could not read video: $error');
+      }
+    }
+  }
+
+  Future<void> _startBunnyTrailerUpload() async {
+    final file = _selectedTrailerVideo;
+    if (file == null) return;
+
+    setState(() {
+      _isSubmitting = true;
+      _trailerSelectionError = null;
+      _uploadTerminalStateHandled = false;
+    });
+
+    try {
+      final session = await ref.read(bunnyStreamServiceProvider).createVideo(
+            title: '${_titleCtrl.text.trim()} (Trailer)',
+            thumbnailTime: 1000,
+          );
+
+      if (session.libraryId.isNotEmpty) {
+        unawaited(
+          ref
+              .read(appSettingsServiceProvider)
+              .set(SettingKeys.bunnyLibraryId, session.libraryId),
+        );
+      }
+
+      final playbackUrl = session.embedUrl.isNotEmpty
+          ? session.embedUrl
+          : session.playbackUrl;
+
+      final notifier = ref.read(adminProvider.notifier);
+      final success = widget.existing != null
+          ? await notifier.updateSeries(
+              id: widget.existing!.id,
+              title: _titleCtrl.text,
+              description: _descCtrl.text,
+              posterUrl: _posterCtrl.text,
+              backdropUrl: _backdropCtrl.text,
+              trailerUrl: playbackUrl,
+              genre: _genreCtrl.text,
+              tagline: _taglineCtrl.text,
+              releaseDate: _releaseDateCtrl.text,
+              isFree: _isFree,
+              isFeatured: _isFeatured,
+            )
+          : await notifier.addSeries(
+              title: _titleCtrl.text,
+              description: _descCtrl.text,
+              posterUrl: _posterCtrl.text,
+              backdropUrl: _backdropCtrl.text,
+              trailerUrl: playbackUrl,
+              genre: _genreCtrl.text,
+              tagline: _taglineCtrl.text,
+              releaseDate: _releaseDateCtrl.text,
+              isFree: _isFree,
+              isFeatured: _isFeatured,
+            );
+
+      if (!success) {
+        if (mounted) setState(() => _isSubmitting = false);
+        return;
+      }
+
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+
+      unawaited(
+        ref
+            .read(mediaUploadControllerProvider.notifier)
+            .start(
+              file: file,
+              title: '${_titleCtrl.text.trim()} (Trailer)',
+              session: session,
+              onComplete: _handleTrailerUploadComplete,
+              onError: _handleTrailerUploadError,
+            ),
+      );
+    } catch (error, stackTrace) {
+      final message = _formatError(error);
+      debugPrint('[AdminDashboardPage] Bunny trailer upload setup failed: $message');
+      debugPrintStack(stackTrace: stackTrace);
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+        _showErrorSnackBar('Could not start Bunny upload: $message');
+      }
+    }
+  }
+
+  Future<void> _handleTrailerUploadComplete() async {
+    if (_uploadTerminalStateHandled) return;
+    _uploadTerminalStateHandled = true;
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Trailer upload completed. Bunny is now processing the video.',
+          ),
+          backgroundColor: Color(0xFF21A45D),
+        ),
+      );
+      Navigator.of(context).pop();
+    }
+  }
+
+  Future<void> _handleTrailerUploadError(Object error) async {
+    if (_uploadTerminalStateHandled) return;
+    _uploadTerminalStateHandled = true;
+    if (mounted) {
+      _showErrorSnackBar('Trailer upload failed: $error');
+    }
+  }
+
+  Future<void> _cancelBunnyUpload() async {
+    _uploadTerminalStateHandled = true;
+    await ref.read(mediaUploadControllerProvider.notifier).cancel();
+  }
+
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.existing != null;
+    final uploadState = ref.watch(mediaUploadControllerProvider);
+    final uploadBusy = uploadState.isActive;
 
     return Dialog(
-      backgroundColor: const Color(0xFF0D1520),
+      backgroundColor: context.surfaceBg,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: SizedBox(
         width: 640,
@@ -4045,21 +4410,21 @@ class _SeriesFormDialogState extends ConsumerState<_SeriesFormDialog>
                   children: [
                     Text(
                       isEdit ? 'Edit Series' : 'Add New Series',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: context.textPrimary,
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     const Spacer(),
                     IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white54),
-                      onPressed: () => Navigator.of(context).pop(),
+                      icon: Icon(Icons.close, color: context.textSecondary),
+                      onPressed: uploadBusy ? null : () => Navigator.of(context).pop(),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                const Divider(color: Color(0xFF1A2840)),
+                Divider(color: context.borderCol),
                 const SizedBox(height: 16),
                 _FormField(
                   label: 'Title *',
@@ -4139,14 +4504,66 @@ class _SeriesFormDialogState extends ConsumerState<_SeriesFormDialog>
                   previewUnavailableText: 'Backdrop preview unavailable',
                 ),
                 const SizedBox(height: 14),
+
+                // Trailer Media Source toggle
                 _FormField(
-                  label: 'Trailer URL',
-                  child: _adminTextField(
-                    _trailerCtrl,
-                    'https://...trailer.mp4',
+                  label: 'Trailer Media Source',
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _MediaSourceButton(
+                          label: 'Bunny Stream',
+                          icon: Icons.cloud_upload_outlined,
+                          selected: _trailerMediaSource == _VideoMediaSource.bunny,
+                          onTap: uploadBusy
+                              ? null
+                              : () => setState(() {
+                                  _trailerMediaSource = _VideoMediaSource.bunny;
+                                  _trailerSelectionError = null;
+                                }),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _MediaSourceButton(
+                          label: 'External URL',
+                          icon: Icons.link,
+                          selected: _trailerMediaSource == _VideoMediaSource.external,
+                          onTap: uploadBusy
+                              ? null
+                              : () => setState(() {
+                                  _trailerMediaSource = _VideoMediaSource.external;
+                                  _trailerSelectionError = null;
+                                }),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+                const SizedBox(height: 14),
+
+                // Trailer Video Picker or URL
+                if (_trailerMediaSource == _VideoMediaSource.bunny)
+                  _FormField(
+                    label: 'Trailer Video (Optional)',
+                    child: _BunnyVideoPicker(
+                      file: _selectedTrailerVideo,
+                      fileSize: _selectedTrailerVideoSize,
+                      error: _trailerSelectionError,
+                      enabled: !uploadBusy && !_isSubmitting,
+                      onPick: _pickTrailerVideo,
+                    ),
+                  )
+                else
+                  _FormField(
+                    label: 'Trailer URL (Optional)',
+                    child: _adminTextField(
+                      _trailerCtrl,
+                      'https://...trailer.mp4',
+                    ),
+                  ),
                 const SizedBox(height: 20),
+
                 Row(
                   children: [
                     _ToggleChip(
@@ -4182,28 +4599,69 @@ class _SeriesFormDialogState extends ConsumerState<_SeriesFormDialog>
                     ),
                   ],
                 ),
+                if (_trailerMediaSource == _VideoMediaSource.bunny && _selectedTrailerVideo != null) ...[
+                  const SizedBox(height: 16),
+                  _BunnyUploadProgressCard(state: uploadState),
+                ],
                 const SizedBox(height: 24),
-                const Divider(color: Color(0xFF1A2840)),
+                Divider(color: context.borderCol),
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     TextButton(
-                      onPressed: _isSubmitting
+                      onPressed: _isSubmitting || uploadBusy
                           ? null
                           : () => Navigator.of(context).pop(),
-                      child: const Text(
+                      child: Text(
                         'Cancel',
-                        style: TextStyle(color: Colors.white54),
+                        style: TextStyle(color: context.textMuted),
                       ),
                     ),
+                    if (uploadState.stage == MediaUploadStage.uploading) ...[
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: () => ref
+                            .read(mediaUploadControllerProvider.notifier)
+                            .pause(),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: context.textPrimary,
+                          side: BorderSide(color: context.borderCol),
+                        ),
+                        child: const Text('Pause'),
+                      ),
+                    ],
+                    if (uploadState.stage == MediaUploadStage.paused) ...[
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: () => ref
+                            .read(mediaUploadControllerProvider.notifier)
+                            .resume(),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: context.textPrimary,
+                          side: BorderSide(color: context.borderCol),
+                        ),
+                        child: const Text('Resume'),
+                      ),
+                    ],
+                    if (uploadBusy) ...[
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: _cancelBunnyUpload,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: context.textPrimary,
+                          side: BorderSide(color: context.borderCol),
+                        ),
+                        child: const Text('Cancel Upload'),
+                      ),
+                    ],
                     const SizedBox(width: 12),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFF05454),
                         foregroundColor: Colors.white,
                       ),
-                      onPressed: _isSubmitting ? null : _submit,
+                      onPressed: _isSubmitting || uploadBusy ? null : _submit,
                       child: _isSubmitting
                           ? const SizedBox(
                               width: 18,
@@ -4229,6 +4687,11 @@ class _SeriesFormDialogState extends ConsumerState<_SeriesFormDialog>
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    if (_trailerMediaSource == _VideoMediaSource.bunny && _selectedTrailerVideo != null) {
+      await _startBunnyTrailerUpload();
       return;
     }
 
@@ -4301,7 +4764,7 @@ class _SeriesStructureDialogState
         .firstOrNull;
 
     return Dialog(
-      backgroundColor: const Color(0xFF0D1520),
+      backgroundColor: context.surfaceBg,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: SizedBox(
         width: 920,
@@ -4319,16 +4782,16 @@ class _SeriesStructureDialogState
                       children: [
                         Text(
                           widget.series.title,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: context.textPrimary,
                             fontSize: 20,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                         const SizedBox(height: 4),
-                        const Text(
+                        Text(
                           'Manage seasons and episodes',
-                          style: TextStyle(color: Colors.white54, fontSize: 12),
+                          style: TextStyle(color: context.textSecondary, fontSize: 12),
                         ),
                       ],
                     ),
@@ -4344,13 +4807,13 @@ class _SeriesStructureDialogState
                   ),
                   const SizedBox(width: 8),
                   IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white54),
+                    icon: Icon(Icons.close, color: context.textSecondary),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
-              const Divider(color: Color(0xFF1A2840)),
+              Divider(color: context.borderCol),
               const SizedBox(height: 16),
               if (_loadingSeasons)
                 const Expanded(
@@ -4359,10 +4822,10 @@ class _SeriesStructureDialogState
                   ),
                 )
               else ...[
-                const Text(
+                Text(
                   'Seasons',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: context.textPrimary,
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
                   ),
@@ -4381,12 +4844,12 @@ class _SeriesStructureDialogState
                                 ? const Color(
                                     0xFF1F9DCC,
                                   ).withValues(alpha: 0.18)
-                                : const Color(0xFF162235),
+                                : context.surfaceBg,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
                               color: selected
                                   ? const Color(0xFF1F9DCC)
-                                  : const Color(0xFF243247),
+                                  : context.borderCol,
                             ),
                           ),
                           child: Row(
@@ -4402,8 +4865,8 @@ class _SeriesStructureDialogState
                                     'S${season.seasonNumber} • ${season.episodeCount} eps',
                                     style: TextStyle(
                                       color: selected
-                                          ? Colors.white
-                                          : Colors.white70,
+                                          ? const Color(0xFF1F9DCC)
+                                          : context.textSecondary,
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
@@ -4411,10 +4874,10 @@ class _SeriesStructureDialogState
                               ),
                               IconButton(
                                 onPressed: () => _showEditSeason(season),
-                                icon: const Icon(
+                                icon: Icon(
                                   Icons.edit_outlined,
                                   size: 16,
-                                  color: Colors.white54,
+                                  color: context.textSecondary,
                                 ),
                                 constraints: const BoxConstraints(
                                   minWidth: 28,
@@ -4448,8 +4911,8 @@ class _SeriesStructureDialogState
                       selectedSeason == null
                           ? 'Episodes'
                           : 'Episodes for Season ${selectedSeason.seasonNumber}',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: context.textPrimary,
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                       ),
@@ -4477,17 +4940,17 @@ class _SeriesStructureDialogState
                           ),
                         )
                       : selectedSeason == null
-                      ? const Center(
+                      ? Center(
                           child: Text(
                             'Add a season to start managing episodes',
-                            style: TextStyle(color: Colors.white38),
+                            style: TextStyle(color: context.textMuted),
                           ),
                         )
                       : _episodes.isEmpty
-                      ? const Center(
+                      ? Center(
                           child: Text(
                             'No episodes in this season yet',
-                            style: TextStyle(color: Colors.white38),
+                            style: TextStyle(color: context.textMuted),
                           ),
                         )
                       : ListView.separated(
@@ -4498,27 +4961,27 @@ class _SeriesStructureDialogState
                             final episode = _episodes[index];
                             return Container(
                               decoration: BoxDecoration(
-                                color: const Color(0xFF162235),
+                                color: context.surfaceBg,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: const Color(0xFF243247),
+                                  color: context.borderCol,
                                 ),
                               ),
                               child: ListTile(
                                 leading: CircleAvatar(
-                                  backgroundColor: const Color(0xFF0D1520),
+                                  backgroundColor: context.elevatedBg,
                                   child: Text(
                                     episode.episodeNumber.toString(),
-                                    style: const TextStyle(color: Colors.white),
+                                    style: TextStyle(color: context.textPrimary),
                                   ),
                                 ),
                                 title: Text(
                                   episode.title,
-                                  style: const TextStyle(color: Colors.white),
+                                  style: TextStyle(color: context.textPrimary),
                                 ),
                                 subtitle: Text(
                                   '${episode.duration ~/ 60} min • ${episode.requiresPremium ? 'Premium' : 'Free'}',
-                                  style: const TextStyle(color: Colors.white54),
+                                  style: TextStyle(color: context.textSecondary),
                                 ),
                                 trailing: Wrap(
                                   spacing: 8,
@@ -4625,22 +5088,22 @@ class _SeriesStructureDialogState
   Future<void> _deleteSeason(SeriesSeasonModel season) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF0D1520),
-        title: const Text(
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: dialogCtx.surfaceBg,
+        title: Text(
           'Delete Season',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: dialogCtx.textPrimary),
         ),
         content: Text(
           'Delete Season ${season.seasonNumber} and all its episodes?',
-          style: const TextStyle(color: Colors.white70),
+          style: TextStyle(color: dialogCtx.textSecondary),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
+            child: Text(
               'Cancel',
-              style: TextStyle(color: Colors.white54),
+              style: TextStyle(color: dialogCtx.textMuted),
             ),
           ),
           ElevatedButton(
@@ -4704,22 +5167,22 @@ class _SeriesStructureDialogState
   Future<void> _deleteEpisode(SeriesEpisodeModel episode) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF0D1520),
-        title: const Text(
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: dialogCtx.surfaceBg,
+        title: Text(
           'Delete Episode',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: dialogCtx.textPrimary),
         ),
         content: Text(
           'Delete "${episode.title}"?',
-          style: const TextStyle(color: Colors.white70),
+          style: TextStyle(color: dialogCtx.textSecondary),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
+            child: Text(
               'Cancel',
-              style: TextStyle(color: Colors.white54),
+              style: TextStyle(color: dialogCtx.textMuted),
             ),
           ),
           ElevatedButton(
@@ -4797,7 +5260,7 @@ class _SeasonFormDialogState extends ConsumerState<_SeasonFormDialog>
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: const Color(0xFF0D1520),
+      backgroundColor: context.surfaceBg,
       child: SizedBox(
         width: 560,
         child: SingleChildScrollView(
@@ -4810,8 +5273,8 @@ class _SeasonFormDialogState extends ConsumerState<_SeasonFormDialog>
               children: [
                 Text(
                   widget.existing == null ? 'Add Season' : 'Edit Season',
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: context.textPrimary,
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                   ),
@@ -4870,15 +5333,16 @@ class _SeasonFormDialogState extends ConsumerState<_SeasonFormDialog>
                       onPressed: _isSubmitting
                           ? null
                           : () => Navigator.of(context).pop(false),
-                      child: const Text(
+                      child: Text(
                         'Cancel',
-                        style: TextStyle(color: Colors.white54),
+                        style: TextStyle(color: context.textMuted),
                       ),
                     ),
                     const SizedBox(width: 12),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFF05454),
+                        backgroundColor: const Color(0xFF1F9DCC),
+                        foregroundColor: Colors.white,
                       ),
                       onPressed: _isSubmitting ? null : _submit,
                       child: _isSubmitting
@@ -4940,6 +5404,16 @@ class _SeasonFormDialogState extends ConsumerState<_SeasonFormDialog>
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// EPISODE MEDIA SOURCE
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum _EpisodeMediaSource { bunny, external }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EPISODE FORM DIALOG
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _EpisodeFormDialog extends ConsumerStatefulWidget {
   const _EpisodeFormDialog({
     required this.seriesId,
@@ -4958,6 +5432,7 @@ class _EpisodeFormDialog extends ConsumerStatefulWidget {
 class _EpisodeFormDialogState extends ConsumerState<_EpisodeFormDialog>
     with _AdminImageUploadStateMixin<_EpisodeFormDialog> {
   final _formKey = GlobalKey<FormState>();
+
   late final TextEditingController _episodeNumberCtrl;
   late final TextEditingController _titleCtrl;
   late final TextEditingController _descriptionCtrl;
@@ -4965,9 +5440,20 @@ class _EpisodeFormDialogState extends ConsumerState<_EpisodeFormDialog>
   late final TextEditingController _videoUrlCtrl;
   late final TextEditingController _durationCtrl;
   late final TextEditingController _releaseDateCtrl;
+
   bool _isFree = false;
   bool _isSubmitting = false;
   bool _isUploadingThumbnail = false;
+
+  // Bunny upload state
+  _EpisodeMediaSource _mediaSource = _EpisodeMediaSource.bunny;
+  XFile? _selectedVideo;
+  int? _selectedVideoSize;
+  String? _videoSelectionError;
+  String? _bunnyDraftId;
+  bool _uploadTerminalStateHandled = false;
+
+  bool get _isEdit => widget.existing != null;
 
   @override
   void initState() {
@@ -4979,9 +5465,12 @@ class _EpisodeFormDialogState extends ConsumerState<_EpisodeFormDialog>
     _titleCtrl = TextEditingController(text: existing?.title ?? '');
     _descriptionCtrl = TextEditingController(text: existing?.description ?? '');
     _thumbnailCtrl = TextEditingController(text: existing?.thumbnailUrl ?? '');
+    _thumbnailCtrl.addListener(_handleThumbnailChanged);
     _videoUrlCtrl = TextEditingController(text: existing?.videoUrl ?? '');
     _durationCtrl = TextEditingController(
-      text: existing?.duration.toString() ?? '',
+      text: existing?.duration != null && existing!.duration > 0
+          ? existing.duration.toString()
+          : '',
     );
     _releaseDateCtrl = TextEditingController(
       text:
@@ -4989,10 +5478,20 @@ class _EpisodeFormDialogState extends ConsumerState<_EpisodeFormDialog>
           DateTime.now().toIso8601String().substring(0, 10),
     );
     _isFree = existing != null ? !existing.requiresPremium : false;
+    // Existing episodes with a Bunny provider default to external URL on edit
+    // since we don't support re-uploading from the edit dialog.
+    if (existing != null) {
+      _mediaSource = _EpisodeMediaSource.external;
+    }
+  }
+
+  void _handleThumbnailChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    _thumbnailCtrl.removeListener(_handleThumbnailChanged);
     _episodeNumberCtrl.dispose();
     _titleCtrl.dispose();
     _descriptionCtrl.dispose();
@@ -5003,31 +5502,112 @@ class _EpisodeFormDialogState extends ConsumerState<_EpisodeFormDialog>
     super.dispose();
   }
 
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: const Color(0xFFF05454),
+        duration: const Duration(seconds: 6),
+      ),
+    );
+  }
+
+  String _formatError(Object error) {
+    if (error is StorageException) {
+      return 'StorageException: ${error.message}';
+    }
+    if (error is PostgrestException) {
+      return 'PostgrestException: ${error.message}';
+    }
+    return '${error.runtimeType}: $error';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final uploadState = ref.watch(mediaUploadControllerProvider);
+    final uploadBusy = uploadState.isActive;
+
     return Dialog(
-      backgroundColor: const Color(0xFF0D1520),
+      backgroundColor: context.surfaceBg,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: SizedBox(
         width: 600,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(28),
           child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  widget.existing == null
-                      ? 'Add Episode to Season ${widget.season.seasonNumber}'
-                      : 'Edit Episode',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
+                // Header
+                Row(
+                  children: [
+                    Text(
+                      _isEdit
+                          ? 'Edit Episode'
+                          : 'Add Episode to Season ${widget.season.seasonNumber}',
+                      style: TextStyle(
+                        color: context.textPrimary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: Icon(Icons.close, color: context.textSecondary),
+                      onPressed: uploadBusy
+                          ? null
+                          : () => Navigator.of(context).pop(false),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 8),
+                Divider(color: context.borderCol),
                 const SizedBox(height: 16),
+
+                // Media source toggle (add only)
+                if (!_isEdit) ...[
+                  _FormField(
+                    label: 'Media Source',
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _MediaSourceButton(
+                            label: 'Bunny Stream',
+                            icon: Icons.cloud_upload_outlined,
+                            selected:
+                                _mediaSource == _EpisodeMediaSource.bunny,
+                            onTap: uploadBusy
+                                ? null
+                                : () => setState(() {
+                                    _mediaSource = _EpisodeMediaSource.bunny;
+                                    _videoSelectionError = null;
+                                  }),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _MediaSourceButton(
+                            label: 'External URL',
+                            icon: Icons.link,
+                            selected:
+                                _mediaSource == _EpisodeMediaSource.external,
+                            onTap: uploadBusy
+                                ? null
+                                : () => setState(() {
+                                    _mediaSource = _EpisodeMediaSource.external;
+                                    _videoSelectionError = null;
+                                  }),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ],
+
+                // Episode number + duration row
                 Row(
                   children: [
                     Expanded(
@@ -5044,18 +5624,30 @@ class _EpisodeFormDialogState extends ConsumerState<_EpisodeFormDialog>
                     const SizedBox(width: 16),
                     Expanded(
                       child: _FormField(
-                        label: 'Duration (seconds) *',
+                        label: !_isEdit &&
+                                _mediaSource == _EpisodeMediaSource.bunny
+                            ? 'Duration (from Bunny)'
+                            : 'Duration (seconds) *',
                         child: _adminTextField(
                           _durationCtrl,
                           '2700',
                           keyboardType: TextInputType.number,
-                          validator: _positiveNumberField,
+                          validator: (v) {
+                            if (!_isEdit &&
+                                _mediaSource == _EpisodeMediaSource.bunny &&
+                                (v == null || v.trim().isEmpty)) {
+                              return null; // Optional for Bunny uploads
+                            }
+                            return _positiveNumberField(v);
+                          },
                         ),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 14),
+
+                // Title
                 _FormField(
                   label: 'Title *',
                   child: _adminTextField(
@@ -5065,6 +5657,8 @@ class _EpisodeFormDialogState extends ConsumerState<_EpisodeFormDialog>
                   ),
                 ),
                 const SizedBox(height: 14),
+
+                // Description
                 _FormField(
                   label: 'Description',
                   child: _adminTextField(
@@ -5074,11 +5668,18 @@ class _EpisodeFormDialogState extends ConsumerState<_EpisodeFormDialog>
                   ),
                 ),
                 const SizedBox(height: 14),
+
+                // Thumbnail
                 _AdminImageUploadField(
-                  label: 'Thumbnail URL *',
+                  label: _mediaSource == _EpisodeMediaSource.bunny && !_isEdit
+                      ? 'Thumbnail (optional)'
+                      : 'Thumbnail URL *',
                   controller: _thumbnailCtrl,
                   hint: 'https://...episode.jpg',
-                  validator: _requiredField,
+                  validator: _mediaSource == _EpisodeMediaSource.bunny &&
+                          !_isEdit
+                      ? null
+                      : _requiredField,
                   isUploading: _isUploadingThumbnail,
                   onUpload: () => uploadImageToController(
                     controller: _thumbnailCtrl,
@@ -5089,15 +5690,31 @@ class _EpisodeFormDialogState extends ConsumerState<_EpisodeFormDialog>
                       'Episode thumbnail preview unavailable',
                 ),
                 const SizedBox(height: 14),
-                _FormField(
-                  label: 'Video URL *',
-                  child: _adminTextField(
-                    _videoUrlCtrl,
-                    'https://...episode.mp4',
-                    validator: _requiredField,
+
+                // Video — Bunny picker or URL field
+                if (_mediaSource == _EpisodeMediaSource.bunny && !_isEdit)
+                  _FormField(
+                    label: 'Video File *',
+                    child: _BunnyVideoPicker(
+                      file: _selectedVideo,
+                      fileSize: _selectedVideoSize,
+                      error: _videoSelectionError,
+                      enabled: !uploadBusy && !_isSubmitting,
+                      onPick: _pickVideo,
+                    ),
+                  )
+                else
+                  _FormField(
+                    label: 'Video URL *',
+                    child: _adminTextField(
+                      _videoUrlCtrl,
+                      'https://...episode.mp4',
+                      validator: _requiredField,
+                    ),
                   ),
-                ),
                 const SizedBox(height: 14),
+
+                // Release date
                 _FormField(
                   label: 'Release Date *',
                   child: _adminTextField(
@@ -5107,6 +5724,8 @@ class _EpisodeFormDialogState extends ConsumerState<_EpisodeFormDialog>
                   ),
                 ),
                 const SizedBox(height: 20),
+
+                // Free / Premium toggle
                 Row(
                   children: [
                     _ToggleChip(
@@ -5126,25 +5745,81 @@ class _EpisodeFormDialogState extends ConsumerState<_EpisodeFormDialog>
                     ),
                   ],
                 ),
+
+                // Bunny upload progress card (add + Bunny only)
+                if (_mediaSource == _EpisodeMediaSource.bunny && !_isEdit) ...[
+                  const SizedBox(height: 20),
+                  _BunnyUploadProgressCard(state: uploadState),
+                ],
+
                 const SizedBox(height: 20),
+                Divider(color: context.borderCol),
+                const SizedBox(height: 16),
+
+                // Action buttons
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     TextButton(
-                      onPressed: _isSubmitting
+                      onPressed: _isSubmitting || uploadBusy
                           ? null
                           : () => Navigator.of(context).pop(false),
-                      child: const Text(
+                      child: Text(
                         'Cancel',
-                        style: TextStyle(color: Colors.white54),
+                        style: TextStyle(color: context.textMuted),
                       ),
                     ),
+                    if (uploadState.stage == MediaUploadStage.uploading) ...[
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: () => ref
+                            .read(mediaUploadControllerProvider.notifier)
+                            .pause(),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: context.textPrimary,
+                          side: BorderSide(color: context.borderCol),
+                        ),
+                        child: const Text('Pause'),
+                      ),
+                    ],
+                    if (uploadState.stage == MediaUploadStage.paused) ...[
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: () => ref
+                            .read(mediaUploadControllerProvider.notifier)
+                            .resume(),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: context.textPrimary,
+                          side: BorderSide(color: context.borderCol),
+                        ),
+                        child: const Text('Resume'),
+                      ),
+                    ],
+                    if (uploadBusy) ...[
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: _cancelBunnyUpload,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: context.textPrimary,
+                          side: BorderSide(color: context.borderCol),
+                        ),
+                        child: const Text('Cancel Upload'),
+                      ),
+                    ],
                     const SizedBox(width: 12),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFF05454),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 12,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
-                      onPressed: _isSubmitting ? null : _submit,
+                      onPressed: _isSubmitting || uploadBusy ? null : _submit,
                       child: _isSubmitting
                           ? const SizedBox(
                               width: 18,
@@ -5157,9 +5832,11 @@ class _EpisodeFormDialogState extends ConsumerState<_EpisodeFormDialog>
                               ),
                             )
                           : Text(
-                              widget.existing == null
-                                  ? 'Add Episode'
-                                  : 'Save Episode',
+                              _isEdit
+                                  ? 'Save Episode'
+                                  : _mediaSource == _EpisodeMediaSource.bunny
+                                  ? 'Upload Episode'
+                                  : 'Add Episode',
                             ),
                     ),
                   ],
@@ -5172,17 +5849,28 @@ class _EpisodeFormDialogState extends ConsumerState<_EpisodeFormDialog>
     );
   }
 
+  // ── Actions ──────────────────────────────────────────────────────────────────
+
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) {
+    if (!_formKey.currentState!.validate()) return;
+
+    if (!_isEdit &&
+        _mediaSource == _EpisodeMediaSource.bunny &&
+        _selectedVideo == null) {
+      setState(() => _videoSelectionError = 'Select a video file');
+      return;
+    }
+
+    if (!_isEdit && _mediaSource == _EpisodeMediaSource.bunny) {
+      await _startBunnyUpload();
       return;
     }
 
     setState(() => _isSubmitting = true);
     final notifier = ref.read(adminProvider.notifier);
-    final success = widget.existing == null
-        ? await notifier.addEpisode(
-            seriesId: widget.seriesId,
-            seasonId: widget.season.id,
+    final success = _isEdit
+        ? await notifier.updateEpisode(
+            id: widget.existing!.id,
             episodeNumber: int.parse(_episodeNumberCtrl.text.trim()),
             title: _titleCtrl.text,
             description: _descriptionCtrl.text,
@@ -5192,8 +5880,9 @@ class _EpisodeFormDialogState extends ConsumerState<_EpisodeFormDialog>
             isFree: _isFree,
             releaseDate: _releaseDateCtrl.text,
           )
-        : await notifier.updateEpisode(
-            id: widget.existing!.id,
+        : await notifier.addEpisode(
+            seriesId: widget.seriesId,
+            seasonId: widget.season.id,
             episodeNumber: int.parse(_episodeNumberCtrl.text.trim()),
             title: _titleCtrl.text,
             description: _descriptionCtrl.text,
@@ -5209,7 +5898,167 @@ class _EpisodeFormDialogState extends ConsumerState<_EpisodeFormDialog>
       Navigator.of(context).pop(success);
     }
   }
+
+  Future<void> _startBunnyUpload() async {
+    final file = _selectedVideo;
+    if (file == null) return;
+
+    setState(() {
+      _isSubmitting = true;
+      _videoSelectionError = null;
+      _uploadTerminalStateHandled = false;
+    });
+
+    try {
+      final session = await ref
+          .read(bunnyStreamServiceProvider)
+          .createVideo(title: _titleCtrl.text.trim(), thumbnailTime: 5000);
+
+      if (session.libraryId.isNotEmpty) {
+        unawaited(
+          ref
+              .read(appSettingsServiceProvider)
+              .set(SettingKeys.bunnyLibraryId, session.libraryId),
+        );
+      }
+
+      final draftId = await ref
+          .read(adminProvider.notifier)
+          .addBunnyEpisodeDraft(
+            seriesId: widget.seriesId,
+            seasonId: widget.season.id,
+            episodeNumber: int.parse(_episodeNumberCtrl.text.trim()),
+            title: _titleCtrl.text,
+            description: _descriptionCtrl.text,
+            thumbnailUrl: _thumbnailCtrl.text,
+            playbackUrl: session.embedUrl.isNotEmpty
+                ? session.embedUrl
+                : session.playbackUrl,
+            bunnyVideoId: session.videoId,
+            isFree: _isFree,
+            releaseDate: _releaseDateCtrl.text,
+          );
+
+      if (!mounted) return;
+      setState(() {
+        _bunnyDraftId = draftId;
+        _isSubmitting = false;
+      });
+
+      unawaited(
+        ref
+            .read(mediaUploadControllerProvider.notifier)
+            .start(
+              file: file,
+              title: _titleCtrl.text.trim(),
+              session: session,
+              onComplete: _handleBunnyUploadComplete,
+              onError: _handleBunnyUploadError,
+            ),
+      );
+    } catch (error, stackTrace) {
+      final message = _formatError(error);
+      debugPrint('[EpisodeFormDialog] Bunny upload setup failed: $message');
+      debugPrintStack(stackTrace: stackTrace);
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+        _showErrorSnackBar('Could not start Bunny upload: $message');
+      }
+    }
+  }
+
+  Future<void> _handleBunnyUploadComplete() async {
+    if (_uploadTerminalStateHandled) return;
+    _uploadTerminalStateHandled = true;
+    final draftId = _bunnyDraftId;
+    if (draftId == null) return;
+
+    try {
+      await ref
+          .read(adminProvider.notifier)
+          .updateBunnyEpisodeStatus(
+            id: draftId,
+            status: 'processing',
+            processingProgress: 0,
+          );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Upload completed. Bunny is now processing the episode.',
+            ),
+            backgroundColor: Color(0xFF21A45D),
+          ),
+        );
+        Navigator.of(context).pop(true);
+      }
+    } catch (error) {
+      _uploadTerminalStateHandled = false;
+      if (mounted) {
+        _showErrorSnackBar(
+          'Upload completed, but processing status could not be saved: $error',
+        );
+      }
+    }
+  }
+
+  Future<void> _handleBunnyUploadError(Object error) async {
+    if (_uploadTerminalStateHandled) return;
+    _uploadTerminalStateHandled = true;
+    final draftId = _bunnyDraftId;
+    if (draftId != null) {
+      try {
+        await ref
+            .read(adminProvider.notifier)
+            .updateBunnyEpisodeStatus(
+              id: draftId,
+              status: 'failed',
+              processingProgress: 0,
+              error: error.toString(),
+            );
+      } catch (_) {
+        // Upload error remains visible in the local progress card.
+      }
+    }
+  }
+
+  Future<void> _cancelBunnyUpload() async {
+    _uploadTerminalStateHandled = true;
+    await ref.read(mediaUploadControllerProvider.notifier).cancel();
+    final draftId = _bunnyDraftId;
+    if (draftId != null) {
+      await ref
+          .read(adminProvider.notifier)
+          .updateBunnyEpisodeStatus(
+            id: draftId,
+            status: 'failed',
+            processingProgress: 0,
+            error: 'Upload cancelled by administrator',
+          );
+    }
+  }
+
+  Future<void> _pickVideo() async {
+    try {
+      final file = await pickVideoFile();
+      if (file == null) return;
+      final size = await file.length();
+      if (!mounted) return;
+      setState(() {
+        _selectedVideo = file;
+        _selectedVideoSize = size;
+        _videoSelectionError = null;
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _videoSelectionError = 'Could not read video: $error');
+      }
+    }
+  }
 }
+
+
+
 
 Widget _adminTextField(
   TextEditingController ctrl,
@@ -5218,13 +6067,17 @@ Widget _adminTextField(
   TextInputType? keyboardType,
   String? Function(String?)? validator,
 }) {
-  return TextFormField(
-    controller: ctrl,
-    maxLines: maxLines,
-    keyboardType: keyboardType,
-    validator: validator,
-    style: const TextStyle(color: Colors.white, fontSize: 14),
-    decoration: _adminFieldDecoration(hint),
+  return Builder(
+    builder: (context) {
+      return TextFormField(
+        controller: ctrl,
+        maxLines: maxLines,
+        keyboardType: keyboardType,
+        validator: validator,
+        style: TextStyle(color: context.textPrimary, fontSize: 14),
+        decoration: _adminFieldDecoration(hint, context),
+      );
+    },
   );
 }
 
@@ -5308,9 +6161,9 @@ class _UsersSectionState extends ConsumerState<_UsersSection> {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: const Color(0xFF0D1520),
+                color: context.surfaceBg,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF1A2840)),
+                border: Border.all(color: context.borderCol),
               ),
               child: _loading
                   ? const Center(
@@ -5328,8 +6181,8 @@ class _UsersSectionState extends ConsumerState<_UsersSection> {
                   : Column(
                       children: [
                         // Header
-                        const Padding(
-                          padding: EdgeInsets.symmetric(
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 12,
                           ),
@@ -5340,7 +6193,7 @@ class _UsersSectionState extends ConsumerState<_UsersSection> {
                                 child: Text(
                                   'EMAIL',
                                   style: TextStyle(
-                                    color: Colors.white38,
+                                    color: context.textMuted,
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
                                     letterSpacing: 0.8,
@@ -5352,7 +6205,7 @@ class _UsersSectionState extends ConsumerState<_UsersSection> {
                                 child: Text(
                                   'USERNAME',
                                   style: TextStyle(
-                                    color: Colors.white38,
+                                    color: context.textMuted,
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
                                     letterSpacing: 0.8,
@@ -5364,7 +6217,7 @@ class _UsersSectionState extends ConsumerState<_UsersSection> {
                                 child: Text(
                                   'ADMIN',
                                   style: TextStyle(
-                                    color: Colors.white38,
+                                    color: context.textMuted,
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
                                     letterSpacing: 0.8,
@@ -5374,12 +6227,12 @@ class _UsersSectionState extends ConsumerState<_UsersSection> {
                             ],
                           ),
                         ),
-                        const Divider(color: Color(0xFF1A2840), height: 1),
+                        Divider(color: context.borderCol, height: 1),
                         Expanded(
                           child: ListView.separated(
                             itemCount: _users.length,
-                            separatorBuilder: (_, _) => const Divider(
-                              color: Color(0xFF1A2840),
+                            separatorBuilder: (_, _) => Divider(
+                              color: context.borderCol,
                               height: 1,
                             ),
                             itemBuilder: (context, i) {
@@ -5387,17 +6240,17 @@ class _UsersSectionState extends ConsumerState<_UsersSection> {
                               final isAdmin = u['is_admin'] as bool? ?? false;
                               return Padding(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 10,
-                                ),
+                                    horizontal: 16,
+                                    vertical: 10,
+                                  ),
                                 child: Row(
                                   children: [
                                     Expanded(
                                       flex: 3,
                                       child: Text(
                                         u['email'] ?? u['id'] ?? '',
-                                        style: const TextStyle(
-                                          color: Colors.white,
+                                        style: TextStyle(
+                                          color: context.textPrimary,
                                           fontSize: 13,
                                         ),
                                         overflow: TextOverflow.ellipsis,
@@ -5407,8 +6260,8 @@ class _UsersSectionState extends ConsumerState<_UsersSection> {
                                       flex: 2,
                                       child: Text(
                                         u['username'] ?? '-',
-                                        style: const TextStyle(
-                                          color: Colors.white60,
+                                        style: TextStyle(
+                                          color: context.textSecondary,
                                           fontSize: 13,
                                         ),
                                         overflow: TextOverflow.ellipsis,
@@ -5447,90 +6300,179 @@ class _UsersSectionState extends ConsumerState<_UsersSection> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SETTINGS SECTION (API Keys & Platform Config)
+// ─────────────────────────────────────────────────────────────────────────────
+// SETTINGS SECTION (Enterprise OTT Platform Configuration)
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _SettingsSection extends ConsumerStatefulWidget {
-  const _SettingsSection();
-
-  @override
-  ConsumerState<_SettingsSection> createState() => _SettingsSectionState();
+enum _SettingsTab {
+  branding,
+  playback,
+  features,
+  legal,
+  infrastructure,
 }
 
-class _SettingsSectionState extends ConsumerState<_SettingsSection> {
-  final _controllers = <String, TextEditingController>{};
+@visibleForTesting
+class SettingsSection extends ConsumerStatefulWidget {
+  const SettingsSection({super.key});
+
+  @override
+  ConsumerState<SettingsSection> createState() => _SettingsSectionState();
+}
+
+// Backward-compatible alias
+typedef _SettingsSection = SettingsSection;
+
+class _SettingsSectionState extends ConsumerState<SettingsSection>
+    with _AdminImageUploadStateMixin<SettingsSection> {
+  _SettingsTab _activeTab = _SettingsTab.branding;
+
+  late final TextEditingController _appNameController;
+  late final TextEditingController _appTaglineController;
+  late final TextEditingController _logoUrlController;
+  late final TextEditingController _faviconUrlController;
+  late final TextEditingController _platformNoticeController;
+  late final TextEditingController _supportEmailController;
+  late final TextEditingController _termsUrlController;
+  late final TextEditingController _privacyUrlController;
+  late final TextEditingController _copyrightController;
+  late final TextEditingController _bunnyPullZoneController;
+
+  String _defaultStreamQuality = '720p HD';
+  String _freeTierMaxQuality = '720p HD';
+  String _premiumTierMaxQuality = '1080p Full HD';
+  String _bufferProfile = 'Standard (Balanced)';
+  bool _autoplayNextEpisode = true;
+  bool _autoplayHeroTrailers = true;
+  bool _enableReels = true;
+  bool _enableReviews = true;
+
+  bool _uploadingLogo = false;
+  bool _uploadingFavicon = false;
   bool _loading = true;
   bool _saving = false;
   String? _message;
 
-  static const _settingGroups = [
-    _SettingGroup(
-      title: 'NOWPayments (Crypto Payments)',
-      icon: Icons.payment_outlined,
-      description: 'Configure crypto payment processing for subscriptions.',
-      keys: [
-        _SettingField(
-          key: 'nowpayments_api_key',
-          label: 'API Key',
-          hint: 'Your NOWPayments API key',
-          isSecret: true,
-        ),
-        _SettingField(
-          key: 'nowpayments_ipn_secret',
-          label: 'IPN Secret',
-          hint: 'Webhook verification secret',
-          isSecret: true,
-        ),
-        _SettingField(
-          key: 'nowpayments_pay_currency',
-          label: 'Default Pay Currency',
-          hint: 'e.g. usdtbsc',
-        ),
-      ],
-    ),
-    _SettingGroup(
-      title: 'Platform',
-      icon: Icons.tv_outlined,
-      description: 'General platform settings.',
-      keys: [
-        _SettingField(
-          key: 'app_name',
-          label: 'App Name',
-          hint: 'e.g. ReelHouse',
-        ),
-      ],
-    ),
+  static const _qualityOptions = [
+    'Auto (Adaptive Bitrate)',
+    '4K Ultra HD',
+    '1080p Full HD',
+    '720p HD',
+    '480p SD',
+    '360p Low',
+  ];
+
+  static const _bufferOptions = [
+    'Standard (Balanced)',
+    'Aggressive Preload (Fast Start)',
+    'Data Saver (Low Bandwidth)',
   ];
 
   @override
   void initState() {
     super.initState();
+    _appNameController = TextEditingController();
+    _appTaglineController = TextEditingController();
+    _logoUrlController = TextEditingController();
+    _faviconUrlController = TextEditingController();
+    _platformNoticeController = TextEditingController();
+    _supportEmailController = TextEditingController();
+    _termsUrlController = TextEditingController();
+    _privacyUrlController = TextEditingController();
+    _copyrightController = TextEditingController();
+    _bunnyPullZoneController = TextEditingController();
+
+    _appNameController.addListener(_onFieldChanged);
+    _appTaglineController.addListener(_onFieldChanged);
+    _logoUrlController.addListener(_onFieldChanged);
+    _faviconUrlController.addListener(_onFieldChanged);
+
     _loadSettings();
+  }
+
+  void _onFieldChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   @override
   void dispose() {
-    for (final c in _controllers.values) {
-      c.dispose();
-    }
+    _appNameController.removeListener(_onFieldChanged);
+    _appTaglineController.removeListener(_onFieldChanged);
+    _logoUrlController.removeListener(_onFieldChanged);
+    _faviconUrlController.removeListener(_onFieldChanged);
+
+    _appNameController.dispose();
+    _appTaglineController.dispose();
+    _logoUrlController.dispose();
+    _faviconUrlController.dispose();
+    _platformNoticeController.dispose();
+    _supportEmailController.dispose();
+    _termsUrlController.dispose();
+    _privacyUrlController.dispose();
+    _copyrightController.dispose();
+    _bunnyPullZoneController.dispose();
+
     super.dispose();
   }
 
   Future<void> _loadSettings() async {
     setState(() => _loading = true);
     try {
-      final settings = await ref.read(appSettingsServiceProvider).getAll();
-      for (final group in _settingGroups) {
-        for (final field in group.keys) {
-          _controllers[field.key] = TextEditingController(
-            text: settings[field.key] ?? '',
-          );
-        }
+      final settings = await ref.read(allSettingsProvider.future);
+      _appNameController.text =
+          settings[SettingKeys.appName] ?? AppStrings.appName;
+      _appTaglineController.text =
+          settings[SettingKeys.appTagline] ??
+          'Stream unlimited movies, series, and exclusive originals';
+      _logoUrlController.text = settings[SettingKeys.appLogoUrl] ?? '';
+      _faviconUrlController.text = settings[SettingKeys.appFaviconUrl] ?? '';
+      _platformNoticeController.text =
+          settings[SettingKeys.platformNotice] ?? '';
+      _supportEmailController.text = settings[SettingKeys.supportEmail] ?? '';
+      _termsUrlController.text = settings[SettingKeys.termsUrl] ?? '';
+      _privacyUrlController.text = settings[SettingKeys.privacyUrl] ?? '';
+      _copyrightController.text =
+          settings[SettingKeys.copyrightText] ??
+          '© ${DateTime.now().year} ${settings[SettingKeys.appName] ?? AppStrings.appName}. All rights reserved.';
+      _bunnyPullZoneController.text =
+          settings[SettingKeys.bunnyPullZone] ?? '';
+
+      if (settings.containsKey(SettingKeys.freeTierMaxQuality) &&
+          _qualityOptions.contains(settings[SettingKeys.freeTierMaxQuality])) {
+        _freeTierMaxQuality = settings[SettingKeys.freeTierMaxQuality]!;
+      } else if (settings.containsKey(SettingKeys.defaultStreamQuality) &&
+          _qualityOptions.contains(settings[SettingKeys.defaultStreamQuality])) {
+        _freeTierMaxQuality = settings[SettingKeys.defaultStreamQuality]!;
+      }
+      if (settings.containsKey(SettingKeys.premiumTierMaxQuality) &&
+          _qualityOptions.contains(settings[SettingKeys.premiumTierMaxQuality])) {
+        _premiumTierMaxQuality = settings[SettingKeys.premiumTierMaxQuality]!;
+      }
+      _defaultStreamQuality = _freeTierMaxQuality;
+      if (settings.containsKey(SettingKeys.bufferProfile) &&
+          _bufferOptions.contains(settings[SettingKeys.bufferProfile])) {
+        _bufferProfile = settings[SettingKeys.bufferProfile]!;
+      }
+      if (settings.containsKey(SettingKeys.autoplayNextEpisode)) {
+        _autoplayNextEpisode =
+            settings[SettingKeys.autoplayNextEpisode] == 'true';
+      }
+      if (settings.containsKey(SettingKeys.autoplayHeroTrailers)) {
+        _autoplayHeroTrailers =
+            settings[SettingKeys.autoplayHeroTrailers] == 'true';
+      }
+      if (settings.containsKey(SettingKeys.enableReels)) {
+        _enableReels = settings[SettingKeys.enableReels] != 'false';
+      }
+      if (settings.containsKey(SettingKeys.enableReviews)) {
+        _enableReviews = settings[SettingKeys.enableReviews] != 'false';
       }
     } catch (e) {
-      debugPrint('Failed to load settings: $e');
+      debugPrint('Failed to load platform settings: $e');
     }
-    setState(() => _loading = false);
+    if (mounted) setState(() => _loading = false);
   }
 
   Future<void> _saveSettings() async {
@@ -5540,30 +6482,80 @@ class _SettingsSectionState extends ConsumerState<_SettingsSection> {
     });
     try {
       final service = ref.read(appSettingsServiceProvider);
-      final updates = <String, String>{};
-      for (final group in _settingGroups) {
-        for (final field in group.keys) {
-          updates[field.key] = _controllers[field.key]?.text ?? '';
-        }
-      }
+      final cleanName = _appNameController.text.trim();
+      final updates = <String, String>{
+        SettingKeys.appName: cleanName.isEmpty ? AppStrings.appName : cleanName,
+        SettingKeys.appTagline: _appTaglineController.text.trim(),
+        SettingKeys.appLogoUrl: _logoUrlController.text.trim(),
+        SettingKeys.appFaviconUrl: _faviconUrlController.text.trim(),
+        SettingKeys.freeTierMaxQuality: _freeTierMaxQuality,
+        SettingKeys.premiumTierMaxQuality: _premiumTierMaxQuality,
+        SettingKeys.defaultStreamQuality: _freeTierMaxQuality,
+        SettingKeys.bufferProfile: _bufferProfile,
+        SettingKeys.bunnyPullZone: _bunnyPullZoneController.text.trim(),
+        SettingKeys.autoplayNextEpisode: _autoplayNextEpisode.toString(),
+        SettingKeys.autoplayHeroTrailers: _autoplayHeroTrailers.toString(),
+        SettingKeys.enableReels: _enableReels.toString(),
+        SettingKeys.enableReviews: _enableReviews.toString(),
+        SettingKeys.platformNotice: _platformNoticeController.text.trim(),
+        SettingKeys.supportEmail: _supportEmailController.text.trim(),
+        SettingKeys.termsUrl: _termsUrlController.text.trim(),
+        SettingKeys.privacyUrl: _privacyUrlController.text.trim(),
+        SettingKeys.copyrightText: _copyrightController.text.trim(),
+      };
+
       await service.setAll(updates);
-      setState(() {
-        _saving = false;
-        _message = 'Settings saved successfully!';
-      });
+      ref.invalidate(allSettingsProvider);
+
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _message =
+              'Platform settings successfully saved! Changes are live across all viewer sessions.';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: const [
+                Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                SizedBox(width: 10),
+                Text('Platform configuration saved successfully!'),
+              ],
+            ),
+            backgroundColor: const Color(0xFF10B981),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     } catch (e) {
-      setState(() {
-        _saving = false;
-        _message = 'Error saving: $e';
-      });
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _message = 'Error saving platform settings: $e';
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(color: Color(0xFFF05454)),
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(color: Color(0xFFF05454)),
+            const SizedBox(height: 16),
+            Text(
+              'Loading platform configuration...',
+              style: TextStyle(color: context.textSecondary, fontSize: 13),
+            ),
+          ],
+        ),
       );
     }
 
@@ -5572,111 +6564,1506 @@ class _SettingsSectionState extends ConsumerState<_SettingsSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
-          const Text(
-            'Configure your platform integrations below. '
-            'Secret values are stored in your database and are only visible to admins.',
-            style: TextStyle(color: Colors.white60, fontSize: 13),
-          ),
+          // 1. Top Header Strip
+          _buildHeader(),
+          const SizedBox(height: 20),
+
+          // 2. Executive Stat / Status Cards
+          _buildOverviewMetrics(),
           const SizedBox(height: 24),
 
-          // Setting groups
-          for (final group in _settingGroups) ...[
-            _buildGroup(group),
-            const SizedBox(height: 20),
-          ],
+          // 3. Segmented Tab Selector
+          _buildTabSelector(),
+          const SizedBox(height: 24),
 
-          // Save button
-          Row(
+          // 4. Tab Content
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            child: _buildActiveTabContent(),
+          ),
+          const SizedBox(height: 28),
+
+          // 5. Bottom Save Action Bar
+          _buildSaveBar(),
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ElevatedButton.icon(
-                onPressed: _saving ? null : _saveSettings,
-                icon: _saving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.save_rounded, size: 18),
-                label: Text(_saving ? 'Saving...' : 'Save All Settings'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFF05454),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 14,
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 12,
+                runSpacing: 8,
+                children: [
+                  Text(
+                    'Platform Configuration & Policies',
+                    style: TextStyle(
+                      color: context.textPrimary,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.5,
+                    ),
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(
+                          Icons.fiber_manual_record,
+                          size: 8,
+                          color: Color(0xFF10B981),
+                        ),
+                        SizedBox(width: 5),
+                        Text(
+                          'Production Live',
+                          style: TextStyle(
+                            color: Color(0xFF10B981),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Configure global streaming branding, player engine defaults, feature modules, and compliance policies.',
+                style: TextStyle(color: context.textSecondary, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOverviewMetrics() {
+    final currentName = _appNameController.text.trim().isNotEmpty
+        ? _appNameController.text.trim()
+        : AppStrings.appName;
+    final hasLogo = _logoUrlController.text.trim().isNotEmpty;
+    final hasFavicon = _faviconUrlController.text.trim().isNotEmpty;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 800;
+        final cardWidth = isNarrow
+            ? double.infinity
+            : (constraints.maxWidth - 32) / 3;
+
+        return Wrap(
+          spacing: 16,
+          runSpacing: 16,
+          children: [
+            SizedBox(
+              width: cardWidth,
+              child: _buildMetricTile(
+                title: 'Platform Identity',
+                value: currentName,
+                subtitle:
+                    'Logo: ${hasLogo ? 'Custom' : 'Default'} • Favicon: ${hasFavicon ? 'Custom' : 'Default'}',
+                icon: Icons.branding_watermark_rounded,
+                accentColor: const Color(0xFF38BDF8),
+              ),
+            ),
+            SizedBox(
+              width: cardWidth,
+              child: _buildMetricTile(
+                title: 'Stream Delivery Profile',
+                value: 'Free: $_freeTierMaxQuality • VIP: $_premiumTierMaxQuality',
+                subtitle: 'Bunny Stream Tier-Capped HLS Engine Active',
+                icon: Icons.live_tv_rounded,
+                accentColor: const Color(0xFFF05454),
+              ),
+            ),
+            SizedBox(
+              width: cardWidth,
+              child: _buildMetricTile(
+                title: 'Security Architecture',
+                value: 'Server-Side Vault',
+                subtitle: 'Crypto & CDN Keys Isolated in Supabase',
+                icon: Icons.security_rounded,
+                accentColor: const Color(0xFF10B981),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildMetricTile({
+    required String title,
+    required String value,
+    required String subtitle,
+    required IconData icon,
+    required Color accentColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: context.surfaceBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: context.borderCol),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: accentColor, size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: context.textMuted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: context.textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: context.textSecondary, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabSelector() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        _buildTabButton(
+          tab: _SettingsTab.branding,
+          label: 'Branding & Identity',
+          icon: Icons.palette_outlined,
+        ),
+        _buildTabButton(
+          tab: _SettingsTab.playback,
+          label: 'Playback & Streaming',
+          icon: Icons.play_circle_outline_rounded,
+        ),
+        _buildTabButton(
+          tab: _SettingsTab.features,
+          label: 'Catalog & Features',
+          icon: Icons.auto_awesome_mosaic_outlined,
+        ),
+        _buildTabButton(
+          tab: _SettingsTab.legal,
+          label: 'Legal & Support',
+          icon: Icons.verified_user_outlined,
+        ),
+        _buildTabButton(
+          tab: _SettingsTab.infrastructure,
+          label: 'Infrastructure & Security',
+          icon: Icons.shield_outlined,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTabButton({
+    required _SettingsTab tab,
+    required String label,
+    required IconData icon,
+  }) {
+    final isSelected = _activeTab == tab;
+    return InkWell(
+      onTap: () => setState(() => _activeTab = tab),
+      borderRadius: BorderRadius.circular(10),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFFF05454).withValues(alpha: 0.15)
+              : context.surfaceBg,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected ? const Color(0xFFF05454) : context.borderCol,
+            width: isSelected ? 1.5 : 1.0,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: isSelected
+                  ? const Color(0xFFF05454)
+                  : context.textSecondary,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? context.textPrimary : context.textSecondary,
+                fontSize: 13,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
               ),
-              const SizedBox(width: 16),
-              if (_message != null)
-                Expanded(
-                  child: Text(
-                    _message!,
-                    style: TextStyle(
-                      color: _message!.startsWith('Error')
-                          ? Colors.red
-                          : const Color(0xFF4CAF50),
-                      fontSize: 13,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActiveTabContent() {
+    switch (_activeTab) {
+      case _SettingsTab.branding:
+        return _buildBrandingTab();
+      case _SettingsTab.playback:
+        return _buildPlaybackTab();
+      case _SettingsTab.features:
+        return _buildFeaturesTab();
+      case _SettingsTab.legal:
+        return _buildLegalTab();
+      case _SettingsTab.infrastructure:
+        return _buildInfrastructureTab();
+    }
+  }
+
+  // ── Tab 1: Branding & Identity ──────────────────────────────────────────────
+  Widget _buildBrandingTab() {
+    final currentName = _appNameController.text.trim().isNotEmpty
+        ? _appNameController.text.trim()
+        : AppStrings.appName;
+    final logoUrl = _logoUrlController.text.trim();
+    final faviconUrl = _faviconUrlController.text.trim();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionCard(
+          title: 'Platform Identity & Visual Assets',
+          subtitle:
+              'Customize your streaming brand title, tagline, navigation logo, and browser favicon.',
+          icon: Icons.palette_outlined,
+          children: [
+            // Platform Name
+            _buildFieldLabel(
+              'Platform Name',
+              'Displayed in browser page titles, navbar headers, notification emails, and SEO metadata.',
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _appNameController,
+              style: TextStyle(color: context.textPrimary, fontSize: 14),
+              decoration: _inputDecoration(
+                hint: 'e.g. StreamOTT',
+                prefixIcon: Icon(
+                  Icons.title_rounded,
+                  color: context.textMuted,
+                  size: 20,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Platform Tagline / Slogan
+            _buildFieldLabel(
+              'Brand Tagline / Slogan',
+              'Secondary punchline used across hero banners, meta descriptions, and invite links.',
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _appTaglineController,
+              style: TextStyle(color: context.textPrimary, fontSize: 14),
+              decoration: _inputDecoration(
+                hint:
+                    'e.g. Stream unlimited movies, series, and exclusive originals',
+                prefixIcon: Icon(
+                  Icons.short_text_rounded,
+                  color: context.textMuted,
+                  size: 20,
+                ),
+              ),
+            ),
+            const SizedBox(height: 28),
+
+            // Website Header Logo
+            Row(
+              children: [
+                const Icon(
+                  Icons.image_outlined,
+                  color: Color(0xFFF05454),
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Website Navigation Bar Logo',
+                  style: TextStyle(
+                    color: context.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            _buildSpecBanner(
+              title: 'Recommended Logo Specifications:',
+              specs: const [
+                'Dimensions: 512 × 128 px (horizontal) or 256 × 256 px (square)',
+                'Format: Transparent PNG or SVG (looks best against dark & light navigation bars)',
+                'Max File Size: 2 MB',
+                'Placement: Top navigation bar, login hero panel, and admin sidebar',
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Live Navigation Bar Preview
+            _buildNavbarPreview(currentName: currentName, logoUrl: logoUrl),
+            const SizedBox(height: 12),
+
+            // Logo Upload & URL controls
+            Row(
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _uploadingLogo
+                      ? null
+                      : () => uploadImageToController(
+                            controller: _logoUrlController,
+                            setUploading: (v) =>
+                                setState(() => _uploadingLogo = v),
+                            fieldLabel: 'Website Logo',
+                          ),
+                  icon: _uploadingLogo
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.cloud_upload_outlined, size: 16),
+                  label: Text(
+                    _uploadingLogo ? 'Uploading Logo...' : 'Upload Logo Image',
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF05454),
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: const Color(
+                      0xFFF05454,
+                    ).withValues(alpha: 0.6),
+                    disabledForegroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
                     ),
                   ),
                 ),
-            ],
-          ),
-          const SizedBox(height: 40),
-
-          // Supabase info box
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A2332),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFF2A3A4E)),
+                if (logoUrl.isNotEmpty) ...[
+                  const SizedBox(width: 10),
+                  OutlinedButton.icon(
+                    onPressed: () => setState(() => _logoUrlController.clear()),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      size: 16,
+                      color: Colors.redAccent,
+                    ),
+                    label: const Text(
+                      'Remove Logo',
+                      style: TextStyle(color: Colors.redAccent),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.redAccent),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _logoUrlController,
+              style: TextStyle(color: context.textPrimary, fontSize: 13),
+              decoration: _inputDecoration(
+                hint:
+                    'Or enter direct Logo Image URL (e.g. https://.../logo.png)',
+                prefixIcon: Icon(
+                  Icons.link_rounded,
+                  color: context.textMuted,
+                  size: 18,
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // Browser Tab Favicon
+            Row(
+              children: [
+                const Icon(
+                  Icons.tab_unselected_rounded,
+                  color: Color(0xFFF05454),
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Browser Window Tab Favicon',
+                  style: TextStyle(
+                    color: context.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            _buildSpecBanner(
+              title: 'Recommended Favicon Specifications:',
+              specs: const [
+                'Dimensions: 64 × 64 px or 32 × 32 px (Square 1:1 aspect ratio)',
+                'Format: PNG or ICO with transparent background',
+                'Max File Size: 500 KB',
+                'Placement: Displays in visitor browser tabs, bookmark bars, and PWA launch icons',
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Mock Browser Tab Preview
+            _buildBrowserTabPreview(
+              currentName: currentName,
+              faviconUrl: faviconUrl,
+            ),
+            const SizedBox(height: 12),
+
+            // Favicon Upload & URL controls
+            Row(
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _uploadingFavicon
+                      ? null
+                      : () => uploadImageToController(
+                            controller: _faviconUrlController,
+                            setUploading: (v) =>
+                                setState(() => _uploadingFavicon = v),
+                            fieldLabel: 'Browser Favicon',
+                          ),
+                  icon: _uploadingFavicon
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.cloud_upload_outlined, size: 16),
+                  label: Text(
+                    _uploadingFavicon
+                        ? 'Uploading Favicon...'
+                        : 'Upload Favicon Image',
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF05454),
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: const Color(
+                      0xFFF05454,
+                    ).withValues(alpha: 0.6),
+                    disabledForegroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+                if (faviconUrl.isNotEmpty) ...[
+                  const SizedBox(width: 10),
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        setState(() => _faviconUrlController.clear()),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      size: 16,
+                      color: Colors.redAccent,
+                    ),
+                    label: const Text(
+                      'Remove Favicon',
+                      style: TextStyle(color: Colors.redAccent),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.redAccent),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _faviconUrlController,
+              style: TextStyle(color: context.textPrimary, fontSize: 13),
+              decoration: _inputDecoration(
+                hint:
+                    'Or enter direct Favicon URL (e.g. https://.../favicon.png)',
+                prefixIcon: Icon(
+                  Icons.link_rounded,
+                  color: context.textMuted,
+                  size: 18,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // ── Tab 2: Playback & Streaming ─────────────────────────────────────────────
+  Widget _buildPlaybackTab() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionCard(
+          title: 'Streaming Engine & Video Player Policies',
+          subtitle:
+              'Configure video resolution preferences, playback automation, and buffer strategies.',
+          icon: Icons.play_circle_outline_rounded,
+          children: [
+            // Free Tier Max Streaming Quality Cap
+            _buildFieldLabel(
+              'Default Streaming Quality Profile',
+              'The maximum streaming resolution accessible to guest and free-tier viewers (e.g. 720p HD or 480p SD).',
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: context.elevatedBg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: context.borderCol),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _freeTierMaxQuality,
+                  isExpanded: true,
+                  dropdownColor: context.surfaceBg,
+                  icon: Icon(
+                    Icons.arrow_drop_down_rounded,
+                    color: context.textSecondary,
+                  ),
+                  items: _qualityOptions.map((opt) {
+                    return DropdownMenuItem<String>(
+                      value: opt,
+                      child: Row(
+                        children: [
+                          Icon(
+                            opt.contains('4K')
+                                ? Icons.four_k_rounded
+                                : opt.contains('1080')
+                                ? Icons.high_quality_rounded
+                                : opt.contains('Auto')
+                                ? Icons.auto_awesome_rounded
+                                : opt.contains('720')
+                                ? Icons.hd_rounded
+                                : opt.contains('480')
+                                ? Icons.sd_rounded
+                                : Icons.speed_rounded,
+                            size: 18,
+                            color: const Color(0xFFF05454),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            opt,
+                            style: TextStyle(
+                              color: context.textPrimary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() {
+                        _freeTierMaxQuality = val;
+                        _defaultStreamQuality = val;
+                      });
+                    }
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Premium Tier Max Streaming Quality
+            _buildFieldLabel(
+              'Premium Subscriber Maximum Resolution',
+              'The highest streaming resolution unlocked for paying VIP subscribers (e.g. 1080p Full HD or 4K Ultra HD).',
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: context.elevatedBg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: context.borderCol),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _premiumTierMaxQuality,
+                  isExpanded: true,
+                  dropdownColor: context.surfaceBg,
+                  icon: Icon(
+                    Icons.arrow_drop_down_rounded,
+                    color: context.textSecondary,
+                  ),
+                  items: _qualityOptions.map((opt) {
+                    return DropdownMenuItem<String>(
+                      value: opt,
+                      child: Row(
+                        children: [
+                          Icon(
+                            opt.contains('4K')
+                                ? Icons.four_k_rounded
+                                : opt.contains('1080')
+                                ? Icons.high_quality_rounded
+                                : opt.contains('Auto')
+                                ? Icons.auto_awesome_rounded
+                                : opt.contains('720')
+                                ? Icons.hd_rounded
+                                : opt.contains('480')
+                                ? Icons.sd_rounded
+                                : Icons.speed_rounded,
+                            size: 18,
+                            color: const Color(0xFFF59E0B),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            opt,
+                            style: TextStyle(
+                              color: context.textPrimary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() => _premiumTierMaxQuality = val);
+                    }
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Autoplay Next Episode
+            _buildSwitchCard(
+              title: 'Autoplay Next Episode in Series',
+              subtitle:
+                  'Display a 10-second countdown and automatically launch the next episode upon series playback completion.',
+              icon: Icons.skip_next_rounded,
+              value: _autoplayNextEpisode,
+              onChanged: (v) => setState(() => _autoplayNextEpisode = v),
+            ),
+            const SizedBox(height: 14),
+
+            // Autoplay Hero Trailers
+            _buildSwitchCard(
+              title: 'Autoplay Featured Hero Previews',
+              subtitle:
+                  'Play muted cinematic teaser trailers on the catalog homepage hero banner when visitors land on the site.',
+              icon: Icons.movie_filter_outlined,
+              value: _autoplayHeroTrailers,
+              onChanged: (v) => setState(() => _autoplayHeroTrailers = v),
+            ),
+            const SizedBox(height: 24),
+
+            // Buffer Profile
+            _buildFieldLabel(
+              'Video Buffer & Pre-Roll Strategy',
+              'Controls segment prefetching behavior on desktop and mobile video players.',
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: context.elevatedBg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: context.borderCol),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _bufferProfile,
+                  isExpanded: true,
+                  dropdownColor: context.surfaceBg,
+                  icon: Icon(
+                    Icons.arrow_drop_down_rounded,
+                    color: context.textSecondary,
+                  ),
+                  items: _bufferOptions.map((opt) {
+                    return DropdownMenuItem<String>(
+                      value: opt,
+                      child: Text(
+                        opt,
+                        style: TextStyle(
+                          color: context.textPrimary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() => _bufferProfile = val);
+                    }
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Bunny CDN Pull Zone Hostname
+            _buildFieldLabel(
+              'Bunny.net CDN Pull Zone Hostname',
+              'The CDN hostname used for tier-capped resolution streaming (e.g. vz-xxxx.b-cdn.net). If left empty, automatically inferred from video library settings.',
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _bunnyPullZoneController,
+              style: TextStyle(color: context.textPrimary, fontSize: 14),
+              decoration: _inputDecoration(
+                hint: 'e.g. vz-399081.b-cdn.net or stream.yourdomain.com',
+                prefixIcon: Icon(
+                  Icons.cloud_done_rounded,
+                  color: context.textMuted,
+                  size: 20,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // ── Tab 3: Catalog & Features ───────────────────────────────────────────────
+  Widget _buildFeaturesTab() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionCard(
+          title: 'Catalog Modules & Community Features',
+          subtitle:
+              'Enable or disable user-facing feature flags, vertical reels, ratings, and site-wide alerts.',
+          icon: Icons.auto_awesome_mosaic_outlined,
+          children: [
+            // Reels Toggle
+            _buildSwitchCard(
+              title: 'Reels / Short-Form Video Feed',
+              subtitle:
+                  'Display the dedicated Reels section in top navigation, mobile bottom bars, and catalog carousels.',
+              icon: Icons.video_library_outlined,
+              value: _enableReels,
+              onChanged: (v) => setState(() => _enableReels = v),
+            ),
+            const SizedBox(height: 14),
+
+            // Reviews Toggle
+            _buildSwitchCard(
+              title: 'Audience Reviews & Star Ratings',
+              subtitle:
+                  'Allow authenticated viewers to rate titles and post public comments on movie and series detail pages.',
+              icon: Icons.star_half_rounded,
+              value: _enableReviews,
+              onChanged: (v) => setState(() => _enableReviews = v),
+            ),
+            const SizedBox(height: 24),
+
+            // Global Platform Notice Banner
+            _buildFieldLabel(
+              'Global Platform Announcement Banner',
+              'When set, this high-priority alert appears across all visitor sessions (useful for maintenance, new releases, or promotions).',
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _platformNoticeController,
+              style: TextStyle(color: context.textPrimary, fontSize: 13),
+              maxLines: 2,
+              decoration: _inputDecoration(
+                hint:
+                    'e.g. Scheduled platform maintenance tonight from 2:00 AM to 4:00 AM UTC. Playback will remain uninterrupted.',
+                prefixIcon: Icon(
+                  Icons.campaign_outlined,
+                  color: context.textMuted,
+                  size: 20,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // ── Tab 4: Legal & Support ──────────────────────────────────────────────────
+  Widget _buildLegalTab() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionCard(
+          title: 'Legal Compliance & Customer Support',
+          subtitle:
+              'Provide direct customer helpdesk contacts, terms of service, and copyright notices.',
+          icon: Icons.verified_user_outlined,
+          children: [
+            // Support Email
+            _buildFieldLabel(
+              'Customer Support / Helpdesk Email',
+              'Displayed in billing receipts, account help dialogs, and platform error pages.',
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _supportEmailController,
+              style: TextStyle(color: context.textPrimary, fontSize: 14),
+              decoration: _inputDecoration(
+                hint: 'e.g. support@yourplatform.com',
+                prefixIcon: Icon(
+                  Icons.mail_outline_rounded,
+                  color: context.textMuted,
+                  size: 20,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Terms of Service URL
+            _buildFieldLabel(
+              'Terms of Service URL',
+              'Official terms of agreement link shown on subscription checkout and signup pages.',
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _termsUrlController,
+              style: TextStyle(color: context.textPrimary, fontSize: 14),
+              decoration: _inputDecoration(
+                hint: 'e.g. https://yourplatform.com/terms',
+                prefixIcon: Icon(
+                  Icons.gavel_rounded,
+                  color: context.textMuted,
+                  size: 20,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Privacy Policy URL
+            _buildFieldLabel(
+              'Privacy Policy URL',
+              'Data protection and privacy declaration link required by global OTT streaming regulations.',
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _privacyUrlController,
+              style: TextStyle(color: context.textPrimary, fontSize: 14),
+              decoration: _inputDecoration(
+                hint: 'e.g. https://yourplatform.com/privacy',
+                prefixIcon: Icon(
+                  Icons.privacy_tip_outlined,
+                  color: context.textMuted,
+                  size: 20,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Copyright Statement
+            _buildFieldLabel(
+              'Platform Copyright & Legal Entity Statement',
+              'Footer copyright declaration displayed at the bottom of the catalog and legal screens.',
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _copyrightController,
+              style: TextStyle(color: context.textPrimary, fontSize: 14),
+              decoration: _inputDecoration(
+                hint: 'e.g. © 2026 ReelHouse Inc. All rights reserved.',
+                prefixIcon: Icon(
+                  Icons.copyright_rounded,
+                  color: context.textMuted,
+                  size: 20,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // ── Tab 5: Infrastructure & Security ────────────────────────────────────────
+  Widget _buildInfrastructureTab() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionCard(
+          title: 'Infrastructure, Cloud Secrets & Security',
+          subtitle:
+              'Enterprise-grade security model: all API keys, payment webhooks, and CDN tokens are isolated server-side.',
+          icon: Icons.shield_outlined,
+          children: [
+            // Enterprise Security Model Banner
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.security_rounded,
+                    color: Color(0xFF10B981),
+                    size: 24,
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Zero Client-Side Secret Exposure Architecture',
+                          style: TextStyle(
+                            color: Color(0xFF10B981),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'To maintain PCI-DSS compliance and protect your payment gateway and video transcoding credentials, all sensitive keys are securely managed directly in Supabase (Project Settings → Edge Functions → Secrets). No private API keys or IPN webhook secrets are exposed to client-side browsers.',
+                          style: TextStyle(
+                            color: context.textSecondary,
+                            fontSize: 12,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Server-Side Integrations Checklist
+            _buildFieldLabel(
+              'Active Server-Side Gateway Integrations',
+              'Status of critical backend cloud services connected to your OTT platform:',
+            ),
+            const SizedBox(height: 10),
+
+            _buildIntegrationRow(
+              title: 'NOWPayments Gateway & Webhooks',
+              badge: 'Edge Function Managed',
+              description:
+                  'Crypto subscription billing processed via server-side Edge Functions with cryptographic IPN HMAC verification.',
+              icon: Icons.payments_rounded,
+              color: const Color(0xFF38BDF8),
+            ),
+            const SizedBox(height: 10),
+
+            _buildIntegrationRow(
+              title: 'Bunny Stream CDN & Video Transcoder',
+              badge: 'Vault Secret Protected',
+              description:
+                  'Direct video uploads and HLS video streaming credentials stored securely in database environment secrets.',
+              icon: Icons.ondemand_video_rounded,
+              color: const Color(0xFFF05454),
+            ),
+            const SizedBox(height: 10),
+
+            _buildIntegrationRow(
+              title: 'Supabase PostgreSQL & Row Level Security',
+              badge: 'RLS Active',
+              description:
+                  'All catalog queries, user profiles, and subscription records guarded by strict database policies.',
+              icon: Icons.storage_rounded,
+              color: const Color(0xFF10B981),
+            ),
+            const SizedBox(height: 24),
+
+            // Cache & Metadata Diagnostics
+            _buildFieldLabel(
+              'Platform Cache & Metadata Diagnostics',
+              'Force an immediate synchronization of platform branding and configuration across local browser caches.',
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () {
+                ref.invalidate(allSettingsProvider);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: const Text(
+                      'Local metadata cache cleared. Fresh configuration loaded!',
+                    ),
+                    backgroundColor: const Color(0xFF38BDF8),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.refresh_rounded, size: 16),
+              label: const Text('Purge Cache & Re-sync Metadata'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: context.textPrimary,
+                side: BorderSide(color: context.borderCol),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildIntegrationRow({
+    required String title,
+    required String badge,
+    required String description,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: context.elevatedBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: context.borderCol),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
+                Row(
                   children: [
-                    Icon(Icons.info_outline, color: Colors.white38, size: 18),
-                    SizedBox(width: 8),
                     Text(
-                      'Supabase Edge Function Secrets',
+                      title,
                       style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
+                        color: context.textPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        badge,
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                const Text(
-                  'For NowPayments webhooks to work, you also need to set these '
-                  'secrets in Supabase Dashboard → Edge Functions → Manage Secrets:',
-                  style: TextStyle(color: Colors.white38, fontSize: 12),
+                const SizedBox(height: 3),
+                Text(
+                  description,
+                  style: TextStyle(color: context.textMuted, fontSize: 11),
                 ),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0D1520),
-                    borderRadius: BorderRadius.circular(6),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Bottom Save Action Bar ──────────────────────────────────────────────────
+  Widget _buildSaveBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: BoxDecoration(
+        color: context.surfaceBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: context.borderCol),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.cloud_done_outlined,
+            color: Color(0xFF10B981),
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _message ??
+                  'Changes made to platform settings will take effect instantly across all client sessions.',
+              style: TextStyle(
+                color: _message != null
+                    ? (_message!.startsWith('Error')
+                          ? Colors.redAccent
+                          : const Color(0xFF10B981))
+                    : context.textMuted,
+                fontSize: 12,
+                fontWeight: _message != null
+                    ? FontWeight.w600
+                    : FontWeight.w400,
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          ElevatedButton.icon(
+            onPressed: _saving ? null : _saveSettings,
+            icon: _saving
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.save_rounded, size: 18),
+            label: Text(_saving ? 'Publishing...' : 'Save All Settings'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFF05454),
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: const Color(
+                0xFFF05454,
+              ).withValues(alpha: 0.6),
+              disabledForegroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Helper UI Components ────────────────────────────────────────────────────
+  Widget _buildSectionCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: context.surfaceBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: context.borderCol),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF05454).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: const Color(0xFFF05454), size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: context.textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(color: context.textMuted, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Divider(color: context.borderCol),
+          const SizedBox(height: 18),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSwitchCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: context.elevatedBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: context.borderCol),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: const Color(0xFFF05454), size: 20),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: context.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
                   ),
-                  child: const SelectableText(
-                    'NOWPAYMENTS_API_KEY=<your key>\n'
-                    'NOWPAYMENTS_IPN_SECRET=<your secret>\n'
-                    'NOWPAYMENTS_DEFAULT_PAY_CURRENCY=usdtbsc',
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(color: context.textMuted, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: value,
+            activeThumbColor: const Color(0xFFF05454),
+            activeTrackColor: const Color(0xFFF05454).withValues(alpha: 0.4),
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFieldLabel(String title, String description) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            color: context.textSecondary,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          description,
+          style: TextStyle(color: context.textMuted, fontSize: 11),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNavbarPreview({
+    required String currentName,
+    required String logoUrl,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: BoxDecoration(
+        color: context.surfaceBg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: context.borderCol),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.visibility_outlined, color: context.textMuted, size: 14),
+              const SizedBox(width: 6),
+              Text(
+                'Live Navigation Bar Preview',
+                style: TextStyle(
+                  color: context.textMuted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            height: 52,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: context.elevatedBg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: context.borderCol),
+            ),
+            child: Row(
+              children: [
+                if (logoUrl.isNotEmpty) ...[
+                  AppBrandingLogo(
+                    logoUrl: logoUrl,
+                    height: 28,
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    borderRadius: BorderRadius.circular(8),
+                    whiteTile: true,
+                  ),
+                  const SizedBox(width: 8),
+                ] else ...[
+                  const Icon(
+                    Icons.play_circle_filled_rounded,
+                    color: Color(0xFFF05454),
+                    size: 26,
+                  ),
+                ],
+                const SizedBox(width: 10),
+                Text(
+                  currentName,
+                  style: TextStyle(
+                    color: context.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: logoUrl.isNotEmpty
+                        ? const Color(0xFFF05454).withValues(alpha: 0.15)
+                        : (context.isDark ? Colors.white10 : Colors.black12),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    logoUrl.isNotEmpty ? 'Custom Logo' : 'Default',
                     style: TextStyle(
-                      color: Color(0xFF3ECF8E),
-                      fontSize: 12,
-                      fontFamily: 'monospace',
+                      color: logoUrl.isNotEmpty
+                          ? const Color(0xFFF05454)
+                          : context.textMuted,
+                      fontSize: 10,
+                      fontWeight: logoUrl.isNotEmpty
+                          ? FontWeight.w600
+                          : FontWeight.normal,
                     ),
                   ),
                 ),
@@ -5688,137 +8075,221 @@ class _SettingsSectionState extends ConsumerState<_SettingsSection> {
     );
   }
 
-  Widget _buildGroup(_SettingGroup group) {
+  Widget _buildBrowserTabPreview({
+    required String currentName,
+    required String faviconUrl,
+  }) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       decoration: BoxDecoration(
-        color: const Color(0xFF111827),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF1F2937)),
+        color: context.surfaceBg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: context.borderCol),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(group.icon, color: const Color(0xFFF05454), size: 20),
-              const SizedBox(width: 10),
+              Icon(
+                Icons.open_in_browser_rounded,
+                color: context.textMuted,
+                size: 14,
+              ),
+              const SizedBox(width: 6),
               Text(
-                group.title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
+                'Live Browser Tab Simulation',
+                style: TextStyle(
+                  color: context.textMuted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.only(top: 8, left: 12, right: 12),
+            decoration: BoxDecoration(
+              color: context.elevatedBg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: context.borderCol),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: context.surfaceBg,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(8),
+                      topRight: Radius.circular(8),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (faviconUrl.isNotEmpty) ...[
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(2),
+                          child: Image.network(
+                            faviconUrl,
+                            width: 16,
+                            height: 16,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, _, _) => Icon(
+                              Icons.public,
+                              size: 16,
+                              color: context.textMuted,
+                            ),
+                          ),
+                        ),
+                      ] else ...[
+                        const Icon(
+                          Icons.play_circle_fill_rounded,
+                          color: Color(0xFFF05454),
+                          size: 16,
+                        ),
+                      ],
+                      const SizedBox(width: 8),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 160),
+                        child: Text(
+                          currentName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: context.textPrimary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Icon(Icons.close, size: 12, color: context.textMuted),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.add,
+                  size: 16,
+                  color: context.textMuted.withValues(alpha: 0.5),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSpecBanner({
+    required String title,
+    required List<String> specs,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: context.isDark
+            ? const Color(0xFF162234)
+            : const Color(0xFFF0F9FF),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: context.isDark
+              ? const Color(0xFF23354E)
+              : const Color(0xFFBAE6FD),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.info_outline,
+                color: context.isDark
+                    ? const Color(0xFF38BDF8)
+                    : const Color(0xFF0284C7),
+                size: 15,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                title,
+                style: TextStyle(
+                  color: context.isDark
+                      ? const Color(0xFF38BDF8)
+                      : const Color(0xFF0284C7),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 6),
-          Text(
-            group.description,
-            style: const TextStyle(color: Colors.white38, fontSize: 12),
-          ),
-          const SizedBox(height: 16),
-          for (final field in group.keys) ...[
-            _buildField(field),
-            if (field != group.keys.last) const SizedBox(height: 12),
+          for (final spec in specs) ...[
+            Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 3),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '• ',
+                    style: TextStyle(color: context.textMuted, fontSize: 11),
+                  ),
+                  Expanded(
+                    child: Text(
+                      spec,
+                      style: TextStyle(
+                        color: context.textSecondary,
+                        fontSize: 11,
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ],
       ),
     );
   }
 
-  Widget _buildField(_SettingField field) {
-    final controller = _controllers[field.key];
-    if (controller == null) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text(
-              field.label,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            if (field.isSecret) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.amber.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Text(
-                  'SECRET',
-                  style: TextStyle(
-                    color: Colors.amber,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-        const SizedBox(height: 6),
-        TextField(
-          controller: controller,
-          obscureText: field.isSecret,
-          style: const TextStyle(color: Colors.white, fontSize: 14),
-          decoration: InputDecoration(
-            hintText: field.hint,
-            hintStyle: const TextStyle(color: Colors.white24),
-            filled: true,
-            fillColor: const Color(0xFF1A2332),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFF2A3A4E)),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFF2A3A4E)),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFFF05454)),
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 12,
-            ),
-          ),
-        ),
-      ],
+  InputDecoration _inputDecoration({
+    required String hint,
+    Widget? prefixIcon,
+  }) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: TextStyle(
+        color: context.isDark ? Colors.white24 : const Color(0xFF94A3B8),
+        fontSize: 13,
+      ),
+      prefixIcon: prefixIcon,
+      filled: true,
+      fillColor: context.elevatedBg,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: context.borderCol),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: context.borderCol),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFFF05454)),
+      ),
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 12,
+      ),
     );
   }
 }
 
-class _SettingGroup {
-  final String title;
-  final IconData icon;
-  final String description;
-  final List<_SettingField> keys;
-  const _SettingGroup({
-    required this.title,
-    required this.icon,
-    required this.description,
-    required this.keys,
-  });
-}
-
-class _SettingField {
-  final String key;
-  final String label;
-  final String hint;
-  final bool isSecret;
-  const _SettingField({
-    required this.key,
-    required this.label,
-    this.hint = '',
-    this.isSecret = false,
-  });
-}

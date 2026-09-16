@@ -27,7 +27,7 @@ class WatchHistoryItemModel extends Equatable {
 
   bool get hasResumePosition {
     return durationWatchedSeconds > 0 &&
-        durationWatchedSeconds < video.duration;
+        (video.duration <= 0 || durationWatchedSeconds < video.duration);
   }
 
   factory WatchHistoryItemModel.fromRemoteJson(Map<String, dynamic> json) {

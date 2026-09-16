@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:video/core/constants/app_config.dart';
 import 'package:video/core/models/user_model.dart';
 import 'package:video/core/providers/service_providers.dart';
+import 'package:video/core/utils/safe_type_parsers.dart';
 
 // Auth State Notifier
 class AuthState {
@@ -87,7 +88,7 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
           .select('is_admin')
           .eq('id', supabaseUser.id)
           .maybeSingle();
-      isAdmin = profile?['is_admin'] as bool? ?? false;
+      isAdmin = parseBoolSafe(profile?['is_admin'], false);
       debugPrint('is_admin fetched: $isAdmin (profile: $profile)');
     } catch (e) {
       debugPrint('Failed to fetch is_admin: $e');
@@ -102,15 +103,14 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
           .order('expires_at', ascending: false)
           .limit(1);
 
-      if (subscriptions.isNotEmpty) {
-        final expiresAtRaw = subscriptions.first['expires_at'] as String?;
-        final expiresAt = expiresAtRaw == null
-            ? null
-            : DateTime.tryParse(expiresAtRaw);
-
-        if (expiresAt != null && expiresAt.isAfter(DateTime.now())) {
-          isPremium = true;
-          premiumExpiresAt = expiresAt;
+      if (subscriptions is List && subscriptions.isNotEmpty) {
+        final firstSub = subscriptions.first;
+        if (firstSub is Map) {
+          final expiresAt = parseDateTimeNullableSafe(firstSub['expires_at']);
+          if (expiresAt != null && expiresAt.isAfter(DateTime.now())) {
+            isPremium = true;
+            premiumExpiresAt = expiresAt;
+          }
         }
       }
     } catch (e) {
@@ -121,14 +121,18 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
       isPremium = true;
     }
 
+    final createdAt = parseDateTimeSafe(supabaseUser.createdAt);
+
     return UserModel(
       id: supabaseUser.id,
       email: supabaseUser.email ?? fallbackEmail,
       username:
-          supabaseUser.userMetadata?['username'] as String? ?? fallbackUsername,
+          supabaseUser.userMetadata?['username']?.toString() ??
+          supabaseUser.userMetadata?['user_name']?.toString() ??
+          fallbackUsername,
       isPremium: isPremium,
       isAdmin: isAdmin,
-      createdAt: DateTime.now(),
+      createdAt: createdAt,
       premiumExpiresAt: premiumExpiresAt,
     );
   }

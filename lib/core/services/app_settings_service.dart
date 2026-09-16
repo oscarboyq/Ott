@@ -11,7 +11,29 @@ class SettingKeys {
   static const String nowpaymentsIpnSecret = 'nowpayments_ipn_secret';
   static const String nowpaymentsPayCurrency = 'nowpayments_pay_currency';
   static const String appName = 'app_name';
+  static const String appLogoUrl = 'app_logo_url';
+  static const String appFaviconUrl = 'app_favicon_url';
+  static const String appTagline = 'app_tagline';
+  static const String supportEmail = 'support_email';
+  static const String termsUrl = 'terms_url';
+  static const String privacyUrl = 'privacy_url';
+  static const String copyrightText = 'copyright_text';
+  static const String defaultStreamQuality = 'default_stream_quality';
+  static const String freeTierMaxQuality = 'free_tier_max_quality';
+  static const String premiumTierMaxQuality = 'premium_tier_max_quality';
+  static const String bufferProfile = 'buffer_profile';
+  static const String autoplayNextEpisode = 'autoplay_next_episode';
+  static const String autoplayHeroTrailers = 'autoplay_hero_trailers';
+  static const String enableReels = 'enable_reels';
+  static const String enableReviews = 'enable_reviews';
+  static const String platformNotice = 'platform_notice';
   static const String setupCompleted = 'setup_completed';
+
+  static bool isSecretKey(String key) {
+    return key == bunnyApiKey ||
+        key == nowpaymentsApiKey ||
+        key == nowpaymentsIpnSecret;
+  }
 }
 
 /// Read/write runtime configuration from the `app_settings` table.
@@ -98,15 +120,14 @@ class AppSettingsService {
     }
   }
 
-  /// Update a setting (admin only via RLS).
+  /// Update a setting (admin only via RLS). Uses upsert so newly added settings insert automatically.
   Future<void> set(String key, String value) async {
-    await _client
-        .from('app_settings')
-        .update({
-          'value': value,
-          'updated_at': DateTime.now().toIso8601String(),
-        })
-        .eq('key', key);
+    await _client.from('app_settings').upsert({
+      'key': key,
+      'value': value,
+      'is_secret': SettingKeys.isSecretKey(key),
+      'updated_at': DateTime.now().toIso8601String(),
+    });
   }
 
   /// Update multiple settings at once.

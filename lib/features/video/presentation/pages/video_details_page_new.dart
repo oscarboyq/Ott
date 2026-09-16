@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
+import 'package:video/app/theme/app_theme.dart';
 import 'package:video/common/widgets/common_widgets.dart';
 import 'package:video/core/models/video_model.dart';
 import 'package:video/core/providers/auth_provider.dart';
@@ -12,6 +13,7 @@ import 'package:video/core/providers/video_catalog_provider.dart';
 import 'package:video/core/providers/watch_history_provider.dart';
 import 'package:video/core/providers/video_rating_provider.dart';
 import 'package:video/core/providers/watchlist_provider.dart';
+import 'package:video/core/services/app_settings_service.dart';
 import 'package:video/core/utils/playback_source_resolver.dart';
 import 'package:video/features/video/presentation/widgets/bunny_web_player.dart';
 
@@ -19,11 +21,13 @@ class VideoDetailsPage extends ConsumerStatefulWidget {
   const VideoDetailsPage({
     required this.videoId,
     this.autoPlay = false,
+    this.initialPositionSeconds,
     super.key,
   });
 
   final String videoId;
   final bool autoPlay;
+  final int? initialPositionSeconds;
 
   @override
   ConsumerState<VideoDetailsPage> createState() => _VideoDetailsPageState();
@@ -35,11 +39,12 @@ class _VideoDetailsPageState extends ConsumerState<VideoDetailsPage> {
   String? _initializedVideoUrl;
   int _selectedRating = 0;
   bool _showRatingPicker = false;
+  String? _selectedQuality;
   VideoModel? _activeVideo;
-  String? _recordedHistoryVideoId;
   String? _resumeAppliedVideoId;
   int _lastPersistedPositionSeconds = -1;
   String? _autoPlayedVideoId;
+  String? _seededHistoryVideoId;
 
   static const double _wideLayoutBreakpoint = 1100;
 
@@ -98,6 +103,8 @@ class _VideoDetailsPageState extends ConsumerState<VideoDetailsPage> {
     return '$count ratings';
   }
 
+  WatchHistoryNotifier? _watchHistoryNotifier;
+
   @override
   void initState() {
     super.initState();
@@ -107,8 +114,33 @@ class _VideoDetailsPageState extends ConsumerState<VideoDetailsPage> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _watchHistoryNotifier = ref.read(watchHistoryProvider.notifier);
+  }
+
+  @override
+  void deactivate() {
+    // Capture state synchronously while still valid, then defer the provider
+    // call via Future() so it runs after the current frame — Riverpod forbids
+    // modifying providers during lifecycle callbacks like deactivate().
+    final video = _activeVideo;
+    final notifier = _watchHistoryNotifier;
+    final controller = _videoPlayerController;
+    final seconds = (controller != null && controller.value.isInitialized)
+        ? controller.value.position.inSeconds
+        : _lastPersistedPositionSeconds;
+    if (video != null && notifier != null && seconds > 0) {
+      Future(() => notifier.recordPlayback(
+            video: video,
+            watchedSeconds: seconds,
+          ));
+    }
+    super.deactivate();
+  }
+
+  @override
   void dispose() {
-    _persistCurrentPlaybackPosition(force: true);
     _videoPlayerController?.removeListener(_handleVideoPlayerChanged);
     _videoPlayerController?.dispose();
     super.dispose();
@@ -120,6 +152,8 @@ class _VideoDetailsPageState extends ConsumerState<VideoDetailsPage> {
     if (oldWidget.videoId != widget.videoId) {
       _selectedRating = 0;
       _showRatingPicker = false;
+      _selectedQuality = null;
+      _seededHistoryVideoId = null;
     }
   }
 
@@ -149,9 +183,14 @@ class _VideoDetailsPageState extends ConsumerState<VideoDetailsPage> {
     controller
         .initialize()
         .then((_) async {
-          await ref
-              .read(watchHistoryProvider.notifier)
-              .recordPlayback(video: video, watchedSeconds: 0);
+          if (widget.initialPositionSeconds != null &&
+              widget.initialPositionSeconds! > 0) {
+            _maybeApplyResumePosition(
+              video: video,
+              controller: controller,
+              resumeSeconds: widget.initialPositionSeconds!,
+            );
+          }
 
           if (widget.autoPlay && _autoPlayedVideoId != video.id) {
             _autoPlayedVideoId = video.id;
@@ -205,20 +244,42 @@ class _VideoDetailsPageState extends ConsumerState<VideoDetailsPage> {
     _saveHistoryPosition(video: video, watchedSeconds: positionSeconds);
   }
 
-  void _persistCurrentPlaybackPosition({bool force = false}) {
-    final controller = _videoPlayerController;
-    final video = _activeVideo;
-    if (controller == null ||
-        video == null ||
-        !controller.value.isInitialized) {
-      return;
-    }
+  void _ensureHistorySeeded(VideoModel video, int resumeSeconds) {
+    if (_seededHistoryVideoId == video.id) return;
+    _seededHistoryVideoId = video.id;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final notifier = _watchHistoryNotifier ??
+          (mounted ? ref.read(watchHistoryProvider.notifier) : null);
+      if (notifier != null) {
+        unawaited(
+          notifier.recordPlayback(
+            video: video,
+            watchedSeconds: resumeSeconds,
+          ),
+        );
+      }
+    });
+  }
 
-    _saveHistoryPosition(
-      video: video,
-      watchedSeconds: controller.value.position.inSeconds,
-      force: force,
-    );
+  void _persistCurrentPlaybackPosition({bool force = false}) {
+    final video = _activeVideo;
+    if (video == null) return;
+
+    final controller = _videoPlayerController;
+    if (controller != null && controller.value.isInitialized) {
+      _saveHistoryPosition(
+        video: video,
+        watchedSeconds: controller.value.position.inSeconds,
+        force: force,
+      );
+    } else if (_lastPersistedPositionSeconds >= 0) {
+      _saveHistoryPosition(
+        video: video,
+        watchedSeconds: _lastPersistedPositionSeconds,
+        force: force,
+      );
+    }
   }
 
   void _saveHistoryPosition({
@@ -234,11 +295,17 @@ class _VideoDetailsPageState extends ConsumerState<VideoDetailsPage> {
     }
 
     _lastPersistedPositionSeconds = watchedSeconds;
-    unawaited(
-      ref
-          .read(watchHistoryProvider.notifier)
-          .recordPlayback(video: video, watchedSeconds: watchedSeconds),
-    );
+    // Use only the cached notifier — never access ref directly here,
+    // as this method may be called from deactivate().
+    final notifier = _watchHistoryNotifier;
+    if (notifier != null) {
+      unawaited(
+        notifier.recordPlayback(
+          video: video,
+          watchedSeconds: watchedSeconds,
+        ),
+      );
+    }
   }
 
   void _maybeApplyResumePosition({
@@ -390,7 +457,9 @@ class _VideoDetailsPageState extends ConsumerState<VideoDetailsPage> {
                           ? _buildVideoPlayer(
                               video,
                               resumeSeconds:
-                                  historyItem?.durationWatchedSeconds ?? 0,
+                                  widget.initialPositionSeconds ??
+                                  historyItem?.durationWatchedSeconds ??
+                                  0,
                             )
                           : _buildPremiumLocked(
                               isAuthenticated: isAuthenticated,
@@ -456,13 +525,28 @@ class _VideoDetailsPageState extends ConsumerState<VideoDetailsPage> {
     required bool isAuthenticated,
     required bool canRate,
   }) {
+    final settings = ref.watch(allSettingsProvider).valueOrNull ?? const {};
+    final authState = ref.watch(authProvider);
+    final isPremiumUser = authState.user?.isPremium == true;
+
+    final freeMaxQuality = settings[SettingKeys.freeTierMaxQuality] ??
+        settings[SettingKeys.defaultStreamQuality] ??
+        '720p HD';
+    final premiumMaxQuality =
+        settings[SettingKeys.premiumTierMaxQuality] ?? '1080p Full HD';
+    final streamQuality = isPremiumUser ? premiumMaxQuality : freeMaxQuality;
+    final bufferProfile =
+        settings[SettingKeys.bufferProfile] ?? 'Standard (Balanced)';
+
+    final activeQuality = _selectedQuality ?? streamQuality;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(video.title, style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: 8),
         Wrap(
-          spacing: 16,
+          spacing: 12,
           runSpacing: 8,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
@@ -475,11 +559,202 @@ class _VideoDetailsPageState extends ConsumerState<VideoDetailsPage> {
                 const SizedBox(width: 6),
                 Text(
                   '(${_ratingCountLabel(totalRatings)})',
-                  style: const TextStyle(color: Colors.white54),
+                  style: TextStyle(color: context.textMuted),
                 ),
               ],
             ),
             Text('${video.duration ~/ 60} min'),
+            PopupMenuButton<String>(
+              tooltip: 'Streaming Quality',
+              color: context.surfaceBg,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: BorderSide(color: context.borderCol),
+              ),
+              onSelected: (val) {
+                if (val.startsWith('locked:')) {
+                  final label = val.replaceFirst('locked:', '');
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Row(
+                        children: [
+                          const Icon(
+                            Icons.workspace_premium_rounded,
+                            color: Color(0xFFF59E0B),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '$label is reserved for VIP members.',
+                            ),
+                          ),
+                        ],
+                      ),
+                      action: SnackBarAction(
+                        label: 'Upgrade',
+                        textColor: const Color(0xFFF59E0B),
+                        onPressed: () => context.push('/plans'),
+                      ),
+                    ),
+                  );
+                  return;
+                }
+                setState(() {
+                  _selectedQuality = val;
+                });
+              },
+              itemBuilder: (ctx) {
+                final options = getQualityOptionsForTier(
+                  isPremium: isPremiumUser,
+                  maxQuality: freeMaxQuality,
+                );
+                return options.map((opt) {
+                  final isCurrent = (opt.label == activeQuality) ||
+                      (parseResolutionNumeric(opt.label) ==
+                          parseResolutionNumeric(activeQuality));
+                  return PopupMenuItem<String>(
+                    value: opt.isLocked ? 'locked:${opt.label}' : opt.label,
+                    child: Row(
+                      children: [
+                        Icon(
+                          opt.isLocked
+                              ? Icons.lock_rounded
+                              : (isCurrent
+                                  ? Icons.check_circle_rounded
+                                  : Icons.radio_button_unchecked_rounded),
+                          size: 16,
+                          color: opt.isLocked
+                              ? Colors.grey
+                              : (isCurrent
+                                  ? const Color(0xFF1F9DCC)
+                                  : context.textMuted),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            opt.label,
+                            style: TextStyle(
+                              color: opt.isLocked
+                                  ? context.textMuted
+                                  : context.textPrimary,
+                              fontWeight: isCurrent
+                                  ? FontWeight.w700
+                                  : FontWeight.normal,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        if (opt.isLocked)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF59E0B)
+                                  .withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              'VIP',
+                              style: TextStyle(
+                                color: Color(0xFFF59E0B),
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                }).toList();
+              },
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isPremiumUser
+                      ? const Color(0xFFF59E0B).withValues(alpha: 0.15)
+                      : const Color(0xFF1F9DCC).withValues(alpha: 0.15),
+                  border: Border.all(
+                    color: isPremiumUser
+                        ? const Color(0xFFF59E0B)
+                        : const Color(0xFF1F9DCC),
+                  ),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isPremiumUser
+                          ? Icons.workspace_premium_rounded
+                          : Icons.hd_rounded,
+                      size: 12,
+                      color: isPremiumUser
+                          ? const Color(0xFFF59E0B)
+                          : const Color(0xFF1F9DCC),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      isPremiumUser
+                          ? (activeQuality.contains('4K')
+                              ? '4K Ultra HD • VIP'
+                              : activeQuality.contains('1080')
+                                  ? '1080p FHD • VIP'
+                                  : '$activeQuality • VIP')
+                          : (activeQuality.contains('720')
+                              ? '720p HD • Free Cap'
+                              : activeQuality.contains('480')
+                                  ? '480p SD • Free Cap'
+                                  : '$activeQuality • Free Cap'),
+                      style: TextStyle(
+                        color: isPremiumUser
+                            ? const Color(0xFFF59E0B)
+                            : const Color(0xFF1F9DCC),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    Icon(
+                      Icons.arrow_drop_down_rounded,
+                      size: 14,
+                      color: isPremiumUser
+                          ? const Color(0xFFF59E0B)
+                          : const Color(0xFF1F9DCC),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: context.elevatedBg,
+                border: Border.all(color: context.borderCol),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.speed_rounded, size: 12, color: context.textMuted),
+                  const SizedBox(width: 4),
+                  Text(
+                    bufferProfile.contains('Aggressive')
+                        ? 'Fast Start Preload'
+                        : bufferProfile.contains('Data Saver')
+                        ? 'Data Saver Buffer'
+                        : 'Balanced Buffer',
+                    style: TextStyle(
+                      color: context.textSecondary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
             if (video.requiresPremium)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -499,9 +774,9 @@ class _VideoDetailsPageState extends ConsumerState<VideoDetailsPage> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: const Color(0xFF101826),
+            color: context.surfaceBg,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFF243247)),
+            border: Border.all(color: context.borderCol),
           ),
           child: Row(
             children: [
@@ -509,7 +784,7 @@ class _VideoDetailsPageState extends ConsumerState<VideoDetailsPage> {
                 canRate
                     ? Icons.star_outline_rounded
                     : Icons.lock_outline_rounded,
-                color: canRate ? const Color(0xFFFFB44C) : Colors.white54,
+                color: canRate ? const Color(0xFFFFB44C) : context.textMuted,
                 size: 18,
               ),
               const SizedBox(width: 10),
@@ -520,7 +795,7 @@ class _VideoDetailsPageState extends ConsumerState<VideoDetailsPage> {
                     isPremiumVideo: video.requiresPremium,
                     canRate: canRate,
                   ),
-                  style: const TextStyle(color: Colors.white70),
+                  style: TextStyle(color: context.textSecondary),
                 ),
               ),
             ],
@@ -536,7 +811,7 @@ class _VideoDetailsPageState extends ConsumerState<VideoDetailsPage> {
           video.description,
           style: Theme.of(
             context,
-          ).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade400),
+          ).textTheme.bodyMedium?.copyWith(color: context.textSecondary),
         ),
         if (video.cast != null && video.cast!.isNotEmpty) ...[
           const SizedBox(height: 24),
@@ -598,14 +873,19 @@ class _VideoDetailsPageState extends ConsumerState<VideoDetailsPage> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF101826),
+        color: context.surfaceBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF243247)),
+        border: Border.all(color: context.borderCol),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Viewer Rating', style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            'Viewer Rating',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: context.textPrimary,
+            ),
+          ),
           const SizedBox(height: 8),
           if (currentUserRating != null) ...[
             Text(
@@ -616,14 +896,14 @@ class _VideoDetailsPageState extends ConsumerState<VideoDetailsPage> {
               ),
             ),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'You can rate each video only once.',
-              style: TextStyle(color: Colors.white54),
+              style: TextStyle(color: context.textMuted),
             ),
           ] else if (canRate && !_showRatingPicker) ...[
-            const Text(
+            Text(
               'Tap the star when you want to rate this video.',
-              style: TextStyle(color: Colors.white70),
+              style: TextStyle(color: context.textSecondary),
             ),
             const SizedBox(height: 14),
             Center(
@@ -638,7 +918,7 @@ class _VideoDetailsPageState extends ConsumerState<VideoDetailsPage> {
                   },
                   iconSize: 30,
                   style: IconButton.styleFrom(
-                    backgroundColor: const Color(0x1ffffb44c),
+                    backgroundColor: const Color(0x1FFFB44C),
                     shape: const CircleBorder(),
                     side: const BorderSide(color: Color(0x66FFB44C)),
                   ),
@@ -652,10 +932,10 @@ class _VideoDetailsPageState extends ConsumerState<VideoDetailsPage> {
           ] else if (canRate) ...[
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Pick a score from 1 to 10. You can submit only once.',
-                    style: TextStyle(color: Colors.white70),
+                    style: TextStyle(color: context.textSecondary),
                   ),
                 ),
                 TextButton(
@@ -690,11 +970,15 @@ class _VideoDetailsPageState extends ConsumerState<VideoDetailsPage> {
                         },
                   selectedColor: const Color(0xFFFFB44C),
                   labelStyle: TextStyle(
-                    color: selected ? Colors.black : Colors.white,
+                    color: selected ? Colors.black : context.textPrimary,
                     fontWeight: FontWeight.w700,
                   ),
-                  backgroundColor: const Color(0xFF162235),
-                  side: const BorderSide(color: Color(0xFF243247)),
+                  backgroundColor: context.elevatedBg,
+                  side: BorderSide(
+                    color: selected
+                        ? const Color(0xFFFFB44C)
+                        : context.borderCol,
+                  ),
                 );
               }),
             ),
@@ -734,7 +1018,7 @@ class _VideoDetailsPageState extends ConsumerState<VideoDetailsPage> {
                 isPremiumVideo: videoRequiresPremium,
                 canRate: canRate,
               ),
-              style: const TextStyle(color: Colors.white70),
+              style: TextStyle(color: context.textSecondary),
             ),
           ],
         ],
@@ -791,16 +1075,74 @@ class _VideoDetailsPageState extends ConsumerState<VideoDetailsPage> {
   }
 
   Widget _buildVideoPlayer(VideoModel video, {required int resumeSeconds}) {
-    if (kIsWeb && isBunnyStreamUrl(video.videoUrl)) {
-      if (_recordedHistoryVideoId != video.id) {
-        _recordedHistoryVideoId = video.id;
-        unawaited(
-          ref
-              .read(watchHistoryProvider.notifier)
-              .recordPlayback(video: video, watchedSeconds: 0),
-        );
+    _activeVideo = video;
+    _ensureHistorySeeded(video, resumeSeconds);
+
+    final settings = ref.watch(allSettingsProvider).valueOrNull ?? const {};
+    final authState = ref.watch(authProvider);
+    final isPremiumUser = authState.user?.isPremium == true;
+
+    final freeMaxQuality = settings[SettingKeys.freeTierMaxQuality] ??
+        settings[SettingKeys.defaultStreamQuality] ??
+        '720p HD';
+    final premiumMaxQuality =
+        settings[SettingKeys.premiumTierMaxQuality] ?? '1080p Full HD';
+    final streamQuality = isPremiumUser ? premiumMaxQuality : freeMaxQuality;
+    final activeQuality = _selectedQuality ?? streamQuality;
+
+    final libraryId = settings[SettingKeys.bunnyLibraryId];
+    final pullZone = settings[SettingKeys.bunnyPullZone];
+    final isBunny = video.mediaProvider == 'bunny' ||
+        isBunnyStreamUrl(video.videoUrl) ||
+        (video.providerVideoId != null && video.providerVideoId!.isNotEmpty);
+
+    if (kIsWeb && isBunny) {
+      String playableUrl = video.videoUrl;
+
+      // Tier-capped direct MP4 enforcement:
+      // When a free user is restricted to a resolution (e.g. 480p or 720p),
+      // we resolve the direct play_480p.mp4 / play_720p.mp4 stream.
+      // This physically prevents higher resolutions from appearing in the player.
+      final directTierUrl = (!isPremiumUser &&
+              !activeQuality.toLowerCase().contains('auto'))
+          ? resolveTierCappedBunnyMediaUrl(
+              videoUrl: video.videoUrl,
+              providerVideoId: video.providerVideoId,
+              libraryId: libraryId,
+              configuredPullZone: pullZone,
+              quality: activeQuality,
+            )
+          : null;
+
+      if (directTierUrl != null) {
+        playableUrl = directTierUrl;
+      } else if (libraryId != null &&
+          libraryId.isNotEmpty &&
+          video.providerVideoId != null &&
+          video.providerVideoId!.isNotEmpty &&
+          !playableUrl.contains('iframe.mediadelivery.net')) {
+        playableUrl =
+            'https://iframe.mediadelivery.net/embed/$libraryId/${video.providerVideoId}';
       }
-      return BunnyWebPlayer(videoUrl: video.videoUrl);
+
+      final bufferProfile = settings[SettingKeys.bufferProfile];
+
+      return BunnyWebPlayer(
+        key: ValueKey(
+          'bunny_${video.id}_${playableUrl}_${activeQuality}_${bufferProfile ?? "standard"}_$isPremiumUser',
+        ),
+        videoUrl: playableUrl,
+        libraryId: libraryId,
+        bufferProfile: bufferProfile,
+        streamQuality: activeQuality,
+        initialPositionSeconds: resumeSeconds,
+        onPositionChanged: (position) {
+          _saveHistoryPosition(
+            video: video,
+            watchedSeconds: position,
+          );
+        },
+      );
     }
 
     final controller = _videoPlayerController;

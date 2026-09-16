@@ -39,7 +39,7 @@ class SeriesHistoryItemModel extends Equatable {
   bool get hasResumePosition {
     return positionSeconds > 0 &&
         !isCompleted &&
-        positionSeconds < episode.duration;
+        (episode.duration <= 0 || positionSeconds < episode.duration);
   }
 
   factory SeriesHistoryItemModel.fromJson(Map<String, dynamic> json) {

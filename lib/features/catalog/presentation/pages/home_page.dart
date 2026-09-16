@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,11 +9,19 @@ import 'package:video/core/models/series_history_item_model.dart';
 import 'package:video/core/models/series_model.dart';
 import 'package:video/core/models/video_model.dart';
 import 'package:video/core/models/watch_history_item_model.dart';
+import 'package:video/common/widgets/branding_logo.dart';
+import 'package:video/app/theme/app_theme.dart';
 import 'package:video/core/providers/auth_provider.dart';
+import 'package:video/core/providers/branding_provider.dart';
 import 'package:video/core/providers/content_search_provider.dart';
 import 'package:video/core/providers/series_catalog_provider.dart';
+import 'package:video/core/providers/theme_provider.dart';
 import 'package:video/core/providers/video_catalog_provider.dart';
 import 'package:video/core/providers/watch_history_provider.dart';
+import 'package:video/core/services/app_settings_service.dart';
+import 'package:video/core/utils/playback_source_resolver.dart';
+import 'package:video/features/video/presentation/widgets/bunny_web_player.dart';
+import 'package:video/features/video/presentation/widgets/network_web_video_player.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -186,8 +196,11 @@ class _HomePageState extends ConsumerState<HomePage> {
         ? videos.first
         : null;
 
+    final settings = ref.watch(allSettingsProvider).valueOrNull ?? const {};
+    final autoplayHero = settings[SettingKeys.autoplayHeroTrailers] != 'false';
+
     return Scaffold(
-      backgroundColor: const Color(0xFF070B12),
+      backgroundColor: context.scaffoldBg,
       body: Stack(
         children: [
           // Main content
@@ -199,8 +212,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                 child: heroVideo != null
                     ? _HeroBanner(
                         video: heroVideo,
+                        autoplayHero: autoplayHero,
+                        bunnyLibraryId: settings[SettingKeys.bunnyLibraryId],
                         onPlay: () => context.push(
-                          '/video/${heroVideo.id}?autoplay=true',
+                          '/video/${heroVideo.id}?autoplay=$autoplayHero',
                         ),
                         onMoreInfo: () =>
                             context.push('/video/${heroVideo.id}'),
@@ -234,18 +249,18 @@ class _HomePageState extends ConsumerState<HomePage> {
                             decoration: BoxDecoration(
                               color: selected
                                   ? const Color(0xFFF05454)
-                                  : const Color(0xFF162235),
+                                  : context.elevatedBg,
                               borderRadius: BorderRadius.circular(999),
                               border: Border.all(
                                 color: selected
                                     ? const Color(0xFFF05454)
-                                    : const Color(0xFF243247),
+                                    : context.borderCol,
                               ),
                             ),
                             child: Text(
                               g,
                               style: TextStyle(
-                                color: selected ? Colors.white : Colors.white60,
+                                color: selected ? Colors.white : context.textSecondary,
                                 fontSize: 13,
                                 fontWeight: selected
                                     ? FontWeight.w700
@@ -269,8 +284,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                       _selectedGenre == 'All'
                           ? 'Results for "$_searchQuery" (${searchResults.length})'
                           : 'Results for "$_searchQuery" in $_selectedGenre (${searchResults.length})',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: context.textPrimary,
                         fontSize: 17,
                         fontWeight: FontWeight.w700,
                       ),
@@ -280,13 +295,13 @@ class _HomePageState extends ConsumerState<HomePage> {
                 if (searchResultsAsync?.isLoading == true)
                   SliverToBoxAdapter(child: _LoadingSkeleton())
                 else if (searchResultsAsync?.hasError == true)
-                  const SliverToBoxAdapter(
+                  SliverToBoxAdapter(
                     child: Padding(
-                      padding: EdgeInsets.only(top: 48),
+                      padding: const EdgeInsets.only(top: 48),
                       child: Center(
                         child: Text(
                           'Unable to load search results',
-                          style: TextStyle(color: Colors.white38),
+                          style: TextStyle(color: context.textMuted),
                         ),
                       ),
                     ),
@@ -300,7 +315,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                           _selectedGenre == 'All'
                               ? 'No matching content found for "$_searchQuery"'
                               : 'No matching $_selectedGenre content found for "$_searchQuery"',
-                          style: const TextStyle(color: Colors.white38),
+                          style: TextStyle(color: context.textMuted),
                         ),
                       ),
                     ),
@@ -324,20 +339,30 @@ class _HomePageState extends ConsumerState<HomePage> {
                 // Filtered grid or rows
               ] else if (_selectedGenre == 'Series') ...[
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                  padding: EdgeInsets.fromLTRB(
+                    MediaQuery.of(context).size.width > 900 ? 28 : 16,
+                    20,
+                    MediaQuery.of(context).size.width > 900 ? 28 : 16,
+                    0,
+                  ),
                   sliver: SliverToBoxAdapter(
                     child: Text(
                       'Series (${filteredSeries.length})',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
+                      style: TextStyle(
+                        color: context.textPrimary,
+                        fontSize: 18,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
                 ),
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                  padding: EdgeInsets.fromLTRB(
+                    MediaQuery.of(context).size.width > 900 ? 28 : 16,
+                    12,
+                    MediaQuery.of(context).size.width > 900 ? 28 : 16,
+                    28,
+                  ),
                   sliver: filteredSeries.isEmpty
                       ? SliverToBoxAdapter(
                           child: Padding(
@@ -347,7 +372,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                                 seriesState.isLoading
                                     ? 'Loading series...'
                                     : 'No series available yet',
-                                style: const TextStyle(color: Colors.white38),
+                                style: TextStyle(color: context.textMuted),
                               ),
                             ),
                           ),
@@ -361,30 +386,40 @@ class _HomePageState extends ConsumerState<HomePage> {
                             );
                           }, childCount: filteredSeries.length),
                           gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 3,
-                                childAspectRatio: 0.68,
-                                crossAxisSpacing: 10,
-                                mainAxisSpacing: 10,
+                              const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 260,
+                                childAspectRatio: 0.88,
+                                crossAxisSpacing: 14,
+                                mainAxisSpacing: 18,
                               ),
                         ),
                 ),
               ] else if (_selectedGenre != 'All') ...[
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                  padding: EdgeInsets.fromLTRB(
+                    MediaQuery.of(context).size.width > 900 ? 28 : 16,
+                    20,
+                    MediaQuery.of(context).size.width > 900 ? 28 : 16,
+                    0,
+                  ),
                   sliver: SliverToBoxAdapter(
                     child: Text(
                       '$_selectedGenre (${filtered.length})',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
+                      style: TextStyle(
+                        color: context.textPrimary,
+                        fontSize: 18,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
                 ),
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                  padding: EdgeInsets.fromLTRB(
+                    MediaQuery.of(context).size.width > 900 ? 28 : 16,
+                    12,
+                    MediaQuery.of(context).size.width > 900 ? 28 : 16,
+                    28,
+                  ),
                   sliver: filtered.isEmpty
                       ? SliverToBoxAdapter(
                           child: Padding(
@@ -392,7 +427,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                             child: Center(
                               child: Text(
                                 'No $_selectedGenre videos yet',
-                                style: const TextStyle(color: Colors.white38),
+                                style: TextStyle(color: context.textMuted),
                               ),
                             ),
                           ),
@@ -412,11 +447,11 @@ class _HomePageState extends ConsumerState<HomePage> {
                             );
                           }, childCount: filtered.length),
                           gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 3,
-                                childAspectRatio: 0.65,
-                                crossAxisSpacing: 10,
-                                mainAxisSpacing: 10,
+                              const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 200,
+                                childAspectRatio: 0.67,
+                                crossAxisSpacing: 14,
+                                mainAxisSpacing: 18,
                               ),
                         ),
                 ),
@@ -500,23 +535,56 @@ class _HomePageState extends ConsumerState<HomePage> {
                     !seriesState.isLoading)
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.only(top: 80),
+                      padding: const EdgeInsets.only(top: 80, left: 24, right: 24),
                       child: Center(
                         child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
-                              Icons.movie_outlined,
-                              color: Colors.white24,
+                              catalogState.errorMessage != null ||
+                                      seriesState.errorMessage != null
+                                  ? Icons.error_outline
+                                  : Icons.movie_outlined,
+                              color: context.textMuted,
                               size: 64,
                             ),
                             const SizedBox(height: 16),
-                            const Text(
-                              'No content yet',
+                            Text(
+                              catalogState.errorMessage != null
+                                  ? 'Failed to load videos: ${catalogState.errorMessage}'
+                                  : seriesState.errorMessage != null
+                                  ? 'Failed to load series: ${seriesState.errorMessage}'
+                                  : 'No content yet',
                               style: TextStyle(
-                                color: Colors.white38,
+                                color: context.textMuted,
                                 fontSize: 16,
                               ),
+                              textAlign: TextAlign.center,
                             ),
+                            if (catalogState.errorMessage != null ||
+                                seriesState.errorMessage != null) ...[
+                              const SizedBox(height: 16),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  ref
+                                      .read(videoCatalogProvider.notifier)
+                                      .loadCatalog(
+                                        genre: _selectedGenre == 'All'
+                                            ? null
+                                            : _selectedGenre,
+                                      );
+                                  ref
+                                      .read(seriesCatalogProvider.notifier)
+                                      .loadSeriesCatalog(
+                                        genre: _selectedGenre == 'All'
+                                            ? null
+                                            : _selectedGenre,
+                                      );
+                                },
+                                icon: const Icon(Icons.refresh),
+                                label: const Text('Retry'),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -529,6 +597,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   SliverToBoxAdapter(child: _LoadingSkeleton()),
               ],
 
+              const SliverToBoxAdapter(child: _CatalogFooter()),
               const SliverToBoxAdapter(child: SizedBox(height: 40)),
             ],
           ),
@@ -577,7 +646,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 // ─────────────────────────────────────────
 // NAV BAR
 // ─────────────────────────────────────────
-class _NavBar extends StatelessWidget {
+class _NavBar extends ConsumerWidget {
   final bool solid;
   final String? username;
   final bool isAuthenticated;
@@ -613,12 +682,19 @@ class _NavBar extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final branding = ref.watch(platformBrandingProvider);
+
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
-      color: solid
-          ? const Color(0xFF070B12).withValues(alpha: 0.97)
-          : Colors.transparent,
+      decoration: BoxDecoration(
+        color: context.isDark
+            ? (solid ? context.navBg : Colors.transparent)
+            : context.navBg,
+        border: (!context.isDark || solid)
+            ? Border(bottom: BorderSide(color: context.borderCol))
+            : null,
+      ),
       padding: EdgeInsets.only(
         top: MediaQuery.of(context).padding.top + 8,
         bottom: 8,
@@ -631,27 +707,44 @@ class _NavBar extends StatelessWidget {
             // Logo
             Row(
               children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF05454),
-                    borderRadius: BorderRadius.circular(8),
+                if (branding.hasCustomLogo)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 10),
+                    child: AppBrandingLogo(
+                      logoUrl: branding.logoUrl!,
+                      height: 28,
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      borderRadius: BorderRadius.circular(8),
+                      whiteTile: true,
+                    ),
+                  )
+                else
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF05454),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.play_arrow_rounded,
-                    color: Colors.white,
-                    size: 22,
-                  ),
-                ),
                 const SizedBox(width: 10),
-                const Text(
-                  'StreamOTT',
+                Text(
+                  branding.name,
                   style: TextStyle(
-                    color: Colors.white,
+                    color: context.textPrimary,
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -0.5,
+                    shadows: (context.isDark && !solid)
+                        ? const [
+                            Shadow(color: Colors.black54, blurRadius: 8),
+                          ]
+                        : null,
                   ),
                 ),
               ],
@@ -670,24 +763,28 @@ class _NavBar extends StatelessWidget {
                       TextField(
                         controller: searchController,
                         autofocus: true,
-                        style: const TextStyle(color: Colors.white),
+                        style: TextStyle(color: context.textPrimary),
                         decoration: InputDecoration(
                           hintText: 'Search movies, shows...',
-                          hintStyle: const TextStyle(color: Colors.white38),
+                          hintStyle: TextStyle(color: context.textMuted),
                           filled: true,
-                          fillColor: const Color(0xFF162235),
+                          fillColor: context.elevatedBg,
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 10,
                           ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(24),
-                            borderSide: BorderSide.none,
+                            borderSide: BorderSide(color: context.borderCol),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(24),
+                            borderSide: BorderSide(color: context.borderCol),
                           ),
                           suffixIcon: IconButton(
-                            icon: const Icon(
+                            icon: Icon(
                               Icons.close,
-                              color: Colors.white54,
+                              color: context.textSecondary,
                             ),
                             onPressed: onSearchClear,
                           ),
@@ -707,21 +804,57 @@ class _NavBar extends StatelessWidget {
                 ),
               ),
 
+            // Reels navigation button
+            if (!searchActive) ...[
+              if (MediaQuery.sizeOf(context).width >= 560)
+                TextButton.icon(
+                  onPressed: onOpenReels,
+                  icon: const Icon(Icons.video_collection_outlined, size: 18),
+                  label: const Text('Reels'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: context.textPrimary,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                  ),
+                )
+              else
+                IconButton(
+                  tooltip: 'Reels',
+                  icon: Icon(
+                    Icons.video_collection_outlined,
+                    color: context.textSecondary,
+                  ),
+                  onPressed: onOpenReels,
+                ),
+              const SizedBox(width: 4),
+            ],
+
             // Search icon
             if (!searchActive)
               IconButton(
-                icon: const Icon(Icons.search, color: Colors.white70),
+                icon: Icon(
+                  Icons.search,
+                  color: context.textSecondary,
+                ),
                 onPressed: onSearchToggle,
               ),
 
             const SizedBox(width: 4),
 
+            // Theme toggle button
+            const ThemeToggleButton(compact: true),
+
+            const SizedBox(width: 8),
+
             // Profile / guest menu
             PopupMenuButton<String>(
               offset: const Offset(0, 44),
-              color: const Color(0xFF101826),
+              color: context.surfaceBg,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: context.borderCol),
               ),
               child: Row(
                 children: [
@@ -740,11 +873,15 @@ class _NavBar extends StatelessWidget {
                   const SizedBox(width: 6),
                   Text(
                     username ?? 'Guest',
-                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                    style: TextStyle(
+                      color: context.textSecondary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                  const Icon(
+                  Icon(
                     Icons.keyboard_arrow_down,
-                    color: Colors.white38,
+                    color: context.textMuted,
                     size: 18,
                   ),
                 ],
@@ -761,7 +898,7 @@ class _NavBar extends StatelessWidget {
                         size: 18,
                         color: isPremium
                             ? const Color(0xFFFFB44C)
-                            : Colors.white70,
+                            : context.textSecondary,
                       ),
                       const SizedBox(width: 10),
                       Text(
@@ -773,85 +910,85 @@ class _NavBar extends StatelessWidget {
                         style: TextStyle(
                           color: isPremium
                               ? const Color(0xFFFFB44C)
-                              : Colors.white,
+                              : context.textPrimary,
                         ),
                       ),
                     ],
                   ),
                 ),
                 const PopupMenuDivider(),
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'reels',
                   child: Row(
                     children: [
                       Icon(
                         Icons.video_collection_outlined,
                         size: 18,
-                        color: Colors.white70,
+                        color: context.textSecondary,
                       ),
-                      SizedBox(width: 10),
-                      Text('Reels', style: TextStyle(color: Colors.white)),
+                      const SizedBox(width: 10),
+                      Text('Reels', style: TextStyle(color: context.textPrimary)),
                     ],
                   ),
                 ),
                 const PopupMenuDivider(),
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'history',
                   child: Row(
                     children: [
                       Icon(
                         Icons.history_rounded,
                         size: 18,
-                        color: Colors.white70,
+                        color: context.textSecondary,
                       ),
-                      SizedBox(width: 10),
-                      Text('History', style: TextStyle(color: Colors.white)),
+                      const SizedBox(width: 10),
+                      Text('History', style: TextStyle(color: context.textPrimary)),
                     ],
                   ),
                 ),
                 const PopupMenuDivider(),
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'plans',
                   child: Row(
                     children: [
                       Icon(
                         Icons.workspace_premium_outlined,
                         size: 18,
-                        color: Colors.white70,
+                        color: context.textSecondary,
                       ),
-                      SizedBox(width: 10),
+                      const SizedBox(width: 10),
                       Text(
                         'Subscription Plans',
-                        style: TextStyle(color: Colors.white),
+                        style: TextStyle(color: context.textPrimary),
                       ),
                     ],
                   ),
                 ),
                 if (!isAuthenticated) ...[
                   const PopupMenuDivider(),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'login',
                     child: Row(
                       children: [
-                        Icon(Icons.login, size: 18, color: Colors.white70),
-                        SizedBox(width: 10),
-                        Text('Sign In', style: TextStyle(color: Colors.white)),
+                        Icon(Icons.login, size: 18, color: context.textSecondary),
+                        const SizedBox(width: 10),
+                        Text('Sign In', style: TextStyle(color: context.textPrimary)),
                       ],
                     ),
                   ),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'register',
                     child: Row(
                       children: [
                         Icon(
                           Icons.person_add_alt_1,
                           size: 18,
-                          color: Colors.white70,
+                          color: context.textSecondary,
                         ),
-                        SizedBox(width: 10),
+                        const SizedBox(width: 10),
                         Text(
                           'Create Account',
-                          style: TextStyle(color: Colors.white),
+                          style: TextStyle(color: context.textPrimary),
                         ),
                       ],
                     ),
@@ -930,14 +1067,14 @@ class _SearchSuggestionPanel extends StatelessWidget {
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: const Color(0xFF101826),
+        color: context.surfaceBg,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF243247)),
-        boxShadow: const [
+        border: Border.all(color: context.borderCol),
+        boxShadow: [
           BoxShadow(
-            color: Color(0x33000000),
+            color: Colors.black.withValues(alpha: context.isDark ? 0.35 : 0.08),
             blurRadius: 20,
-            offset: Offset(0, 12),
+            offset: const Offset(0, 12),
           ),
         ],
       ),
@@ -950,8 +1087,8 @@ class _SearchSuggestionPanel extends StatelessWidget {
               : results!.when(
                   data: (items) {
                     if (items.isEmpty) {
-                      return const Padding(
-                        padding: EdgeInsets.symmetric(
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(
                           horizontal: 16,
                           vertical: 18,
                         ),
@@ -959,13 +1096,13 @@ class _SearchSuggestionPanel extends StatelessWidget {
                           children: [
                             Icon(
                               Icons.search_off_rounded,
-                              color: Colors.white38,
+                              color: context.textMuted,
                               size: 18,
                             ),
-                            SizedBox(width: 10),
+                            const SizedBox(width: 10),
                             Text(
                               'No matching content found',
-                              style: TextStyle(color: Colors.white54),
+                              style: TextStyle(color: context.textSecondary),
                             ),
                           ],
                         ),
@@ -978,7 +1115,7 @@ class _SearchSuggestionPanel extends StatelessWidget {
                       shrinkWrap: true,
                       itemCount: visibleItems.length,
                       separatorBuilder: (_, _) =>
-                          const Divider(height: 1, color: Color(0xFF1B2638)),
+                          Divider(height: 1, color: context.borderCol),
                       itemBuilder: (context, index) {
                         final result = visibleItems[index];
                         return InkWell(
@@ -997,11 +1134,11 @@ class _SearchSuggestionPanel extends StatelessWidget {
                                     height: 44,
                                     child: result.imageUrl.isEmpty
                                         ? Container(
-                                            color: const Color(0xFF162235),
+                                            color: context.elevatedBg,
                                             alignment: Alignment.center,
                                             child: Icon(
                                               result.type.icon,
-                                              color: Colors.white38,
+                                              color: context.textMuted,
                                               size: 18,
                                             ),
                                           )
@@ -1010,13 +1147,11 @@ class _SearchSuggestionPanel extends StatelessWidget {
                                             fit: BoxFit.cover,
                                             errorBuilder: (_, _, _) =>
                                                 Container(
-                                                  color: const Color(
-                                                    0xFF162235,
-                                                  ),
+                                                  color: context.elevatedBg,
                                                   alignment: Alignment.center,
                                                   child: Icon(
                                                     result.type.icon,
-                                                    color: Colors.white38,
+                                                    color: context.textMuted,
                                                     size: 18,
                                                   ),
                                                 ),
@@ -1036,7 +1171,7 @@ class _SearchSuggestionPanel extends StatelessWidget {
                                         overflow: TextOverflow.ellipsis,
                                         style: theme.textTheme.bodyMedium
                                             ?.copyWith(
-                                              color: Colors.white,
+                                              color: context.textPrimary,
                                               fontWeight: FontWeight.w600,
                                             ),
                                       ),
@@ -1046,7 +1181,7 @@ class _SearchSuggestionPanel extends StatelessWidget {
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: theme.textTheme.bodySmall
-                                            ?.copyWith(color: Colors.white54),
+                                            ?.copyWith(color: context.textSecondary),
                                       ),
                                     ],
                                   ),
@@ -1079,11 +1214,11 @@ class _SearchSuggestionPanel extends StatelessWidget {
                       },
                     );
                   },
-                  loading: () => const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                  loading: () => Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
                     child: Row(
                       children: [
-                        SizedBox(
+                        const SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
@@ -1091,27 +1226,27 @@ class _SearchSuggestionPanel extends StatelessWidget {
                             color: Color(0xFFF05454),
                           ),
                         ),
-                        SizedBox(width: 12),
+                        const SizedBox(width: 12),
                         Text(
                           'Searching all content...',
-                          style: TextStyle(color: Colors.white54),
+                          style: TextStyle(color: context.textSecondary),
                         ),
                       ],
                     ),
                   ),
-                  error: (_, _) => const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                  error: (_, _) => Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
                     child: Row(
                       children: [
                         Icon(
                           Icons.error_outline_rounded,
-                          color: Colors.white38,
+                          color: context.textMuted,
                           size: 18,
                         ),
-                        SizedBox(width: 10),
+                        const SizedBox(width: 10),
                         Text(
                           'Unable to load search results',
-                          style: TextStyle(color: Colors.white54),
+                          style: TextStyle(color: context.textSecondary),
                         ),
                       ],
                     ),
@@ -1136,9 +1271,9 @@ class _SearchResultTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(18),
       child: Container(
         decoration: BoxDecoration(
-          color: const Color(0xFF101826),
+          color: context.surfaceBg,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFF243247)),
+          border: Border.all(color: context.borderCol),
         ),
         child: Padding(
           padding: const EdgeInsets.all(12),
@@ -1154,21 +1289,21 @@ class _SearchResultTile extends StatelessWidget {
                           result.imageUrl,
                           fit: BoxFit.cover,
                           errorBuilder: (_, _, _) => Container(
-                            color: const Color(0xFF162235),
+                            color: context.elevatedBg,
                             alignment: Alignment.center,
                             child: Icon(
                               result.type.icon,
-                              color: Colors.white30,
+                              color: context.textMuted,
                               size: 28,
                             ),
                           ),
                         )
                       : Container(
-                          color: const Color(0xFF162235),
+                          color: context.elevatedBg,
                           alignment: Alignment.center,
                           child: Icon(
                             result.type.icon,
-                            color: Colors.white30,
+                            color: context.textMuted,
                             size: 28,
                           ),
                         ),
@@ -1226,8 +1361,8 @@ class _SearchResultTile extends StatelessWidget {
                       result.title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: context.textPrimary,
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                         height: 1.2,
@@ -1238,8 +1373,8 @@ class _SearchResultTile extends StatelessWidget {
                       result.subtitle,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white54,
+                      style: TextStyle(
+                        color: context.textSecondary,
                         fontSize: 13,
                         height: 1.4,
                       ),
@@ -1248,7 +1383,7 @@ class _SearchResultTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(Icons.chevron_right_rounded, color: Colors.white38),
+              Icon(Icons.chevron_right_rounded, color: context.textMuted),
             ],
           ),
         ),
@@ -1300,22 +1435,22 @@ class _ReelsPromoRow extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'Reels',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: context.textPrimary,
                         fontSize: 17,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(height: 4),
                     Text(
                       'Quick vertical clips with the same library access rules.',
-                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                      style: TextStyle(color: context.textSecondary, fontSize: 12),
                     ),
                   ],
                 ),
@@ -1324,7 +1459,7 @@ class _ReelsPromoRow extends StatelessWidget {
                 onPressed: onOpenFeed,
                 style: FilledButton.styleFrom(
                   backgroundColor: const Color(0xFFFFB44C),
-                  foregroundColor: const Color(0xFF0D1520),
+                  foregroundColor: Colors.black,
                 ),
                 icon: const Icon(Icons.video_collection_outlined),
                 label: const Text('Open Reels'),
@@ -1346,9 +1481,9 @@ class _ReelsPromoRow extends StatelessWidget {
                     width: 128,
                     clipBehavior: Clip.antiAlias,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF101826),
+                      color: context.surfaceBg,
                       borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: const Color(0xFF243247)),
+                      border: Border.all(color: context.borderCol),
                     ),
                     child: Stack(
                       fit: StackFit.expand,
@@ -1358,10 +1493,10 @@ class _ReelsPromoRow extends StatelessWidget {
                             reel.thumbnailUrl,
                             fit: BoxFit.cover,
                             errorBuilder: (_, _, _) =>
-                                Container(color: const Color(0xFF162235)),
+                                Container(color: context.elevatedBg),
                           )
                         else
-                          Container(color: const Color(0xFF162235)),
+                          Container(color: context.elevatedBg),
                         const DecoratedBox(
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
@@ -1468,8 +1603,10 @@ class _ReelsPromoRow extends StatelessWidget {
 // ─────────────────────────────────────────
 // HERO BANNER
 // ─────────────────────────────────────────
-class _HeroBanner extends StatelessWidget {
+class _HeroBanner extends StatefulWidget {
   final VideoModel video;
+  final bool autoplayHero;
+  final String? bunnyLibraryId;
   final VoidCallback onPlay;
   final VoidCallback onMoreInfo;
 
@@ -1477,10 +1614,49 @@ class _HeroBanner extends StatelessWidget {
     required this.video,
     required this.onPlay,
     required this.onMoreInfo,
+    this.autoplayHero = true,
+    this.bunnyLibraryId,
   });
 
   @override
+  State<_HeroBanner> createState() => _HeroBannerState();
+}
+
+class _HeroBannerState extends State<_HeroBanner> {
+  bool _isHovered = false;
+  bool _isPlayingPreview = false;
+  Timer? _hoverTimer;
+
+  @override
+  void dispose() {
+    _hoverTimer?.cancel();
+    super.dispose();
+  }
+
+  void _onHoverEnter() {
+    if (!widget.autoplayHero) return;
+    setState(() => _isHovered = true);
+    _hoverTimer?.cancel();
+    _hoverTimer = Timer(const Duration(milliseconds: 600), () {
+      if (mounted && _isHovered) {
+        setState(() => _isPlayingPreview = true);
+      }
+    });
+  }
+
+  void _onHoverExit() {
+    _hoverTimer?.cancel();
+    if (mounted) {
+      setState(() {
+        _isHovered = false;
+        _isPlayingPreview = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final video = widget.video;
     final w = MediaQuery.of(context).size.width;
     final h = w > 900 ? 520.0 : 300.0;
     final heroBadgeLabel = video.isFeatured ? 'FEATURED' : 'NOW STREAMING';
@@ -1488,88 +1664,224 @@ class _HeroBanner extends StatelessWidget {
         ? const Color(0xFFF05454)
         : const Color(0xFF1F9DCC);
 
-    return SizedBox(
-      height: h,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Backdrop image
-          Image.network(
-            video.thumbnailUrl,
-            fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => Container(
-              color: const Color(0xFF101826),
-              child: const Center(
-                child: Icon(
-                  Icons.movie_outlined,
-                  color: Colors.white12,
-                  size: 80,
+    return MouseRegion(
+      onEnter: (_) => _onHoverEnter(),
+      onExit: (_) => _onHoverExit(),
+      child: SizedBox(
+        height: h,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Backdrop image
+            Image.network(
+              video.thumbnailUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => Container(
+                color: const Color(0xFF101826),
+                child: const Center(
+                  child: Icon(
+                    Icons.movie_outlined,
+                    color: Colors.white12,
+                    size: 80,
+                  ),
                 ),
               ),
             ),
-          ),
 
-          // Gradient overlays
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                stops: [0.0, 0.4, 1.0],
-                colors: [
-                  Color(0x66070B12),
-                  Colors.transparent,
-                  Color(0xFF070B12),
-                ],
+            // Live video preview layer (only when hovered and autoplayHero is ON - permanently muted)
+            if (_isPlayingPreview && widget.autoplayHero)
+              Positioned.fill(
+                child: ClipRect(
+                  child: IgnorePointer(
+                    ignoring: true,
+                    child: kIsWeb
+                        ? (isBunnyStreamUrl(video.videoUrl)
+                            ? BunnyWebPlayer(
+                                key: ValueKey('hero-preview-${video.id}'),
+                                videoUrl: video.videoUrl,
+                                libraryId: widget.bunnyLibraryId,
+                                capturePointerEvents: false,
+                                muted: true,
+                                autoplay: true,
+                              )
+                            : NetworkWebVideoPlayer(
+                                key: ValueKey('hero-preview-${video.id}'),
+                                videoUrl: resolvePlayableVideoUrl(video.videoUrl),
+                                muted: true,
+                                autoplay: true,
+                                showControls: false,
+                                loop: true,
+                              ))
+                        : const SizedBox(),
+                  ),
+                ),
+              ),
+
+            // Gradient overlays
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  stops: const [0.0, 0.4, 1.0],
+                  colors: [
+                    context.isDark
+                        ? const Color(0x66070B12)
+                        : Colors.white.withValues(alpha: 0.35),
+                    Colors.transparent,
+                    context.scaffoldBg,
+                  ],
+                ),
               ),
             ),
-          ),
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-                colors: [Color(0xCC070B12), Colors.transparent],
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    context.isDark
+                        ? const Color(0xCC070B12)
+                        : Colors.white.withValues(alpha: 0.85),
+                    Colors.transparent,
+                  ],
+                ),
               ),
             ),
-          ),
 
-          // Content
-          Positioned(
-            bottom: 40,
-            left: 28,
-            right: w * 0.4,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Hero badge
-                Container(
+            // Static non-clickable Muted Preview indicator when live preview is playing (no sound toggle)
+            if (_isPlayingPreview && widget.autoplayHero)
+              Positioned(
+                right: 28,
+                bottom: 40,
+                child: Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
+                    horizontal: 12,
+                    vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: heroBadgeColor,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    heroBadgeLabel,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1,
+                    color: Colors.black.withValues(alpha: 0.75),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: Colors.white24,
                     ),
                   ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.volume_off_rounded,
+                        color: Colors.white70,
+                        size: 14,
+                      ),
+                      SizedBox(width: 6),
+                      Text(
+                        'MUTED PREVIEW',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 12),
+              ),
+
+            // Content
+            Positioned(
+              bottom: 40,
+              left: 28,
+              right: w * 0.4,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Hero badges row
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: heroBadgeColor,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          heroBadgeLabel,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: widget.autoplayHero
+                              ? (_isPlayingPreview
+                                  ? const Color(0xFF21A45D).withValues(alpha: 0.3)
+                                  : const Color(0xFF21A45D).withValues(alpha: 0.2))
+                              : Colors.black.withValues(alpha: 0.45),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: widget.autoplayHero
+                                ? const Color(0xFF21A45D)
+                                : Colors.white24,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              widget.autoplayHero
+                                  ? (_isPlayingPreview
+                                      ? Icons.videocam_rounded
+                                      : Icons.play_circle_fill_rounded)
+                                  : Icons.image_outlined,
+                              size: 12,
+                              color: widget.autoplayHero
+                                  ? const Color(0xFF21A45D)
+                                  : Colors.white70,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              widget.autoplayHero
+                                  ? (_isPlayingPreview
+                                      ? 'PREVIEW PLAYING'
+                                      : 'PREVIEW AUTOPLAY')
+                                  : 'STATIC POSTER',
+                              style: TextStyle(
+                                color: widget.autoplayHero
+                                    ? const Color(0xFF21A45D)
+                                    : Colors.white70,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
 
                 // Title
                 Text(
                   video.title,
                   style: TextStyle(
-                    color: Colors.white,
+                    color: context.textPrimary,
                     fontSize: w > 900 ? 42 : 26,
                     fontWeight: FontWeight.w900,
                     height: 1.1,
@@ -1601,13 +1913,13 @@ class _HeroBanner extends StatelessWidget {
                           vertical: 3,
                         ),
                         decoration: BoxDecoration(
-                          border: Border.all(color: Colors.white30),
+                          border: Border.all(color: context.borderCol),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
                           video.genre,
-                          style: const TextStyle(
-                            color: Colors.white70,
+                          style: TextStyle(
+                            color: context.textSecondary,
                             fontSize: 12,
                           ),
                         ),
@@ -1643,8 +1955,8 @@ class _HeroBanner extends StatelessWidget {
                   video.description,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white60,
+                  style: TextStyle(
+                    color: context.textSecondary,
                     fontSize: 13,
                     height: 1.5,
                   ),
@@ -1655,7 +1967,7 @@ class _HeroBanner extends StatelessWidget {
                 Row(
                   children: [
                     ElevatedButton.icon(
-                      onPressed: onPlay,
+                      onPressed: widget.onPlay,
                       icon: const Icon(Icons.play_arrow_rounded, size: 22),
                       label: const Text(
                         'Play Now',
@@ -1679,15 +1991,15 @@ class _HeroBanner extends StatelessWidget {
                     ),
                     const SizedBox(width: 12),
                     OutlinedButton.icon(
-                      onPressed: onMoreInfo,
-                      icon: const Icon(Icons.info_outline, size: 18),
-                      label: const Text(
+                      onPressed: widget.onMoreInfo,
+                      icon: Icon(Icons.info_outline, size: 18, color: context.textPrimary),
+                      label: Text(
                         'More Info',
-                        style: TextStyle(fontWeight: FontWeight.w600),
+                        style: TextStyle(fontWeight: FontWeight.w600, color: context.textPrimary),
                       ),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: const BorderSide(color: Colors.white38),
+                        foregroundColor: context.textPrimary,
+                        side: BorderSide(color: context.borderCol),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 20,
                           vertical: 14,
@@ -1704,8 +2016,9 @@ class _HeroBanner extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 class _ContinueWatchingRow extends StatelessWidget {
@@ -1730,22 +2043,22 @@ class _ContinueWatchingRow extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'Continue Watching',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: context.textPrimary,
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      SizedBox(height: 4),
+                      const SizedBox(height: 4),
                       Text(
                         'Your last 10 videos, reels, and episodes.',
-                        style: TextStyle(color: Colors.white54, fontSize: 12),
+                        style: TextStyle(color: context.textSecondary, fontSize: 12),
                       ),
                     ],
                   ),
@@ -1822,20 +2135,21 @@ class _ContinueWatchingCardState extends State<_ContinueWatchingCard> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          transform: Matrix4.identity()..scale(_hovered ? 1.02 : 1.0),
+          duration: const Duration(milliseconds: 180),
+          transform: Matrix4.identity()..scale(_hovered ? 1.025 : 1.0),
+          transformAlignment: Alignment.center,
           decoration: BoxDecoration(
-            color: const Color(0xFF101826),
+            color: context.surfaceBg,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color: _hovered
-                  ? const Color(0xFF1F9DCC)
-                  : const Color(0xFF243247),
+                  ? const Color(0xFFF05454)
+                  : context.borderCol,
             ),
             boxShadow: _hovered
                 ? [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.35),
+                      color: Colors.black.withValues(alpha: context.isDark ? 0.35 : 0.08),
                       blurRadius: 18,
                       offset: const Offset(0, 10),
                     ),
@@ -1855,13 +2169,13 @@ class _ContinueWatchingCardState extends State<_ContinueWatchingCard> {
                         entry.thumbnailUrl,
                         fit: BoxFit.cover,
                         errorBuilder: (_, _, _) => Container(
-                          color: const Color(0xFF162235),
+                          color: context.elevatedBg,
                           alignment: Alignment.center,
                           child: Icon(
                             entry.isSeries
                                 ? Icons.live_tv_rounded
                                 : Icons.movie_outlined,
-                            color: Colors.white24,
+                            color: context.textMuted,
                             size: 40,
                           ),
                         ),
@@ -1899,14 +2213,28 @@ class _ContinueWatchingCardState extends State<_ContinueWatchingCard> {
                           ),
                         ),
                       ),
-                      const Center(
-                        child: CircleAvatar(
-                          radius: 26,
-                          backgroundColor: Color(0x99000000),
-                          child: Icon(
+                      Positioned(
+                        left: 12,
+                        bottom: 12,
+                        child: Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF05454),
+                            borderRadius: BorderRadius.circular(999),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(
+                                  0xFFF05454,
+                                ).withValues(alpha: 0.45),
+                                blurRadius: 12,
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
                             Icons.play_arrow_rounded,
                             color: Colors.white,
-                            size: 30,
+                            size: 24,
                           ),
                         ),
                       ),
@@ -1923,8 +2251,8 @@ class _ContinueWatchingCardState extends State<_ContinueWatchingCard> {
                           entry.subtitle!,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white54,
+                          style: TextStyle(
+                            color: context.textSecondary,
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
                           ),
@@ -1935,8 +2263,8 @@ class _ContinueWatchingCardState extends State<_ContinueWatchingCard> {
                         entry.title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: context.textPrimary,
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                           height: 1.2,
@@ -1948,7 +2276,7 @@ class _ContinueWatchingCardState extends State<_ContinueWatchingCard> {
                         child: LinearProgressIndicator(
                           value: entry.progress,
                           minHeight: 6,
-                          backgroundColor: const Color(0xFF243247),
+                          backgroundColor: context.elevatedBg,
                           valueColor: const AlwaysStoppedAnimation<Color>(
                             Color(0xFFF05454),
                           ),
@@ -1957,8 +2285,8 @@ class _ContinueWatchingCardState extends State<_ContinueWatchingCard> {
                       const SizedBox(height: 8),
                       Text(
                         '${_formatTime(entry.watchedSeconds)} of ${_formatTime(entry.durationSeconds)} watched',
-                        style: const TextStyle(
-                          color: Colors.white60,
+                        style: TextStyle(
+                          color: context.textSecondary,
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
                         ),
@@ -1998,7 +2326,9 @@ class _ContinueWatchingEntry {
       durationSeconds: item.video.duration,
       progress: item.progress,
       hasResumePosition: item.hasResumePosition,
-      routeLocation: '/video/${item.videoId}',
+      routeLocation: item.hasResumePosition
+          ? '/video/${item.videoId}?start=${item.durationWatchedSeconds}'
+          : '/video/${item.videoId}',
       isSeries: false,
       subtitle: item.video.isReel ? 'Reel' : item.video.genre,
     );
@@ -2016,7 +2346,9 @@ class _ContinueWatchingEntry {
       durationSeconds: item.episode.duration,
       progress: item.progress,
       hasResumePosition: item.hasResumePosition,
-      routeLocation: '/series/${item.seriesId}/episode/${item.episodeId}',
+      routeLocation: item.hasResumePosition
+          ? '/series/${item.seriesId}/episode/${item.episodeId}?start=${item.positionSeconds}'
+          : '/series/${item.seriesId}/episode/${item.episodeId}',
       isSeries: true,
       subtitle: '${item.series.title} • Episode ${item.episode.episodeNumber}',
     );
@@ -2066,8 +2398,8 @@ class _HorizontalRow extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: context.textPrimary,
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                   ),
@@ -2167,8 +2499,8 @@ class _SeriesHorizontalRow extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: context.textPrimary,
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                   ),
@@ -2208,16 +2540,16 @@ class _SeriesHorizontalRow extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           SizedBox(
-            height: 245,
+            height: 250,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: series.length,
               separatorBuilder: (_, _) => const SizedBox(width: 12),
-              itemBuilder: (context, index) {
-                final item = series[index];
+              itemBuilder: (context, i) {
+                final item = series[i];
                 return SizedBox(
-                  width: 176,
+                  width: 155,
                   child: _SeriesCard(series: item, onTap: () => onTap(item)),
                 );
               },
@@ -2230,87 +2562,54 @@ class _SeriesHorizontalRow extends StatelessWidget {
 }
 
 class _SeriesCard extends StatelessWidget {
-  const _SeriesCard({required this.series, required this.onTap});
-
   final SeriesModel series;
   final VoidCallback onTap;
 
+  const _SeriesCard({required this.series, required this.onTap});
+
   @override
   Widget build(BuildContext context) {
-    final imageUrl = series.posterUrl.isNotEmpty
-        ? series.posterUrl
-        : series.backdropUrl;
-
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
-      child: Container(
+      borderRadius: BorderRadius.circular(16),
+      child: Ink(
         decoration: BoxDecoration(
-          color: const Color(0xFF101826),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFF243247)),
+          color: context.surfaceBg,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: context.borderCol),
         ),
-        clipBehavior: Clip.antiAlias,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
+            AspectRatio(
+              aspectRatio: 16 / 10,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  if (imageUrl.isNotEmpty)
-                    Image.network(
-                      imageUrl,
+                  ClipRRect(
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(16),
+                    ),
+                    child: Image.network(
+                      series.posterUrl,
                       fit: BoxFit.cover,
                       errorBuilder: (_, _, _) => Container(
-                        color: const Color(0xFF162235),
+                        color: context.elevatedBg,
                         alignment: Alignment.center,
-                        child: const Icon(
+                        child: Icon(
                           Icons.live_tv_rounded,
-                          color: Colors.white30,
-                          size: 34,
+                          color: context.textMuted,
+                          size: 36,
                         ),
                       ),
-                    )
-                  else
-                    Container(
-                      color: const Color(0xFF162235),
-                      alignment: Alignment.center,
-                      child: const Icon(
-                        Icons.live_tv_rounded,
-                        color: Colors.white30,
-                        size: 34,
-                      ),
                     ),
+                  ),
                   const DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: [Colors.transparent, Color(0xDD070B12)],
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    top: 10,
-                    left: 10,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: series.requiresPremium
-                            ? const Color(0xFFF05454)
-                            : const Color(0xFF21A45D),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        series.requiresPremium ? 'Premium' : 'Free',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        colors: [Color(0x10000000), Color(0x99000000)],
                       ),
                     ),
                   ),
@@ -2328,36 +2627,41 @@ class _SeriesCard extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     series.title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
+                    style: TextStyle(
+                      color: context.textPrimary,
+                      fontSize: 13,
                       fontWeight: FontWeight.w700,
                       height: 1.2,
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 5),
                   Text(
                     '${series.seasonCount} seasons • ${series.episodeCount} episodes',
-                    style: const TextStyle(
-                      color: Colors.white54,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: context.textSecondary,
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 3),
                   Text(
                     series.genre,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Color(0xFF1F9DCC),
-                      fontSize: 11,
+                      fontSize: 10,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -2379,7 +2683,7 @@ class _HeroSkeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     final h = MediaQuery.of(context).size.width > 900 ? 520.0 : 300.0;
     return _Shimmer(
-      child: Container(height: h, color: const Color(0xFF162235)),
+      child: Container(height: h, color: context.elevatedBg),
     );
   }
 }
@@ -2397,7 +2701,7 @@ class _LoadingSkeleton extends StatelessWidget {
               height: 20,
               width: 140,
               decoration: BoxDecoration(
-                color: const Color(0xFF162235),
+                color: context.elevatedBg,
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
@@ -2413,7 +2717,7 @@ class _LoadingSkeleton extends StatelessWidget {
                 child: Container(
                   width: 145,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF162235),
+                    color: context.elevatedBg,
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
@@ -2458,4 +2762,213 @@ class _ShimmerState extends State<_Shimmer>
   @override
   Widget build(BuildContext context) =>
       FadeTransition(opacity: _anim, child: widget.child);
+}
+
+class _CatalogFooter extends ConsumerWidget {
+  const _CatalogFooter();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final branding = ref.watch(platformBrandingProvider);
+
+    return Container(
+      margin: const EdgeInsets.only(top: 48),
+      padding: const EdgeInsets.fromLTRB(24, 40, 24, 28),
+      decoration: BoxDecoration(
+        color: context.isDark ? context.surfaceBg : context.elevatedBg,
+        border: Border(
+          top: BorderSide(
+            color: context.borderCol,
+            width: 1,
+          ),
+        ),
+      ),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1100),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Logo & Brand Name
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (branding.hasCustomLogo)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: AppBrandingLogo(
+                        logoUrl: branding.logoUrl!,
+                        height: 28,
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        borderRadius: BorderRadius.circular(8),
+                        whiteTile: true,
+                      ),
+                    )
+                  else
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF05454),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                  const SizedBox(width: 10),
+                  Text(
+                    branding.name,
+                    style: TextStyle(
+                      color: context.textPrimary,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+
+              // Brand Tagline / Slogan
+              if (branding.tagline.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    branding.tagline,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: context.textSecondary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                ),
+
+              // Optional Platform Announcement / Notice
+              if (branding.hasPlatformNotice) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF05454).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: const Color(0xFFF05454).withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.campaign_rounded,
+                        size: 16,
+                        color: Color(0xFFF05454),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          branding.platformNotice!,
+                          style: TextStyle(
+                            color: context.textPrimary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              const SizedBox(height: 24),
+
+              // Navigation Links
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 24,
+                runSpacing: 10,
+                children: [
+                  _FooterLink(
+                    label: 'Series',
+                    onTap: () => context.push('/series'),
+                  ),
+                  _FooterLink(
+                    label: 'Reels',
+                    onTap: () => context.push('/reels'),
+                  ),
+                  _FooterLink(
+                    label: 'Watch History',
+                    onTap: () => context.push('/history'),
+                  ),
+                  if (branding.termsUrl != null &&
+                      branding.termsUrl!.isNotEmpty)
+                    _FooterLink(
+                      label: 'Terms of Service',
+                      onTap: () {},
+                    ),
+                  if (branding.privacyUrl != null &&
+                      branding.privacyUrl!.isNotEmpty)
+                    _FooterLink(
+                      label: 'Privacy Policy',
+                      onTap: () {},
+                    ),
+                  if (branding.supportEmail != null &&
+                      branding.supportEmail!.isNotEmpty)
+                    _FooterLink(
+                      label: 'Support: ${branding.supportEmail}',
+                      onTap: () {},
+                    ),
+                ],
+              ),
+
+              const SizedBox(height: 20),
+
+              // Copyright
+              Text(
+                branding.copyrightText ??
+                    '© ${DateTime.now().year} ${branding.name}. All rights reserved.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: context.textMuted,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FooterLink extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _FooterLink({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: context.textSecondary,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
 }

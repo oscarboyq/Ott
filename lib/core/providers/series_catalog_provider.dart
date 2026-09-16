@@ -3,6 +3,7 @@ import 'package:video/core/models/series_episode_model.dart';
 import 'package:video/core/models/series_model.dart';
 import 'package:video/core/models/series_season_model.dart';
 import 'package:video/core/models/series_watch_progress_model.dart';
+import 'package:video/core/providers/auth_provider.dart';
 import 'package:video/core/providers/service_providers.dart';
 
 class SeriesCatalogState {
@@ -30,7 +31,13 @@ class SeriesCatalogState {
 }
 
 class SeriesCatalogNotifier extends StateNotifier<SeriesCatalogState> {
-  SeriesCatalogNotifier(this.ref) : super(const SeriesCatalogState());
+  SeriesCatalogNotifier(this.ref) : super(const SeriesCatalogState()) {
+    ref.listen<AuthState>(authProvider, (previous, next) {
+      if (previous?.isAuthenticated != next.isAuthenticated) {
+        loadSeriesCatalog();
+      }
+    });
+  }
 
   final Ref ref;
 
@@ -40,7 +47,8 @@ class SeriesCatalogNotifier extends StateNotifier<SeriesCatalogState> {
       final apiService = ref.read(apiServiceProvider);
       final seriesData = await apiService.getSeriesCatalog(genre: genre);
       final series = (seriesData as Iterable)
-          .map((item) => SeriesModel.fromJson(item as Map<String, dynamic>))
+          .whereType<Map>()
+          .map((item) => SeriesModel.fromJson(item))
           .toList(growable: false);
 
       state = state.copyWith(series: series, isLoading: false);
@@ -62,11 +70,11 @@ final seriesDetailsProvider = FutureProvider.family<SeriesModel?, String>((
   final apiService = ref.watch(apiServiceProvider);
   try {
     final data = await apiService.getSeriesDetails(seriesId);
-    if (data == null) {
+    if (data == null || data is! Map) {
       return null;
     }
 
-    return SeriesModel.fromJson(data as Map<String, dynamic>);
+    return SeriesModel.fromJson(data);
   } catch (_) {
     return null;
   }
@@ -81,10 +89,8 @@ final seriesSeasonsProvider =
       try {
         final data = await apiService.getSeriesSeasons(seriesId);
         return (data as Iterable)
-            .map(
-              (item) =>
-                  SeriesSeasonModel.fromJson(item as Map<String, dynamic>),
-            )
+            .whereType<Map>()
+            .map((item) => SeriesSeasonModel.fromJson(item))
             .toList(growable: false);
       } catch (_) {
         return const [];
@@ -100,10 +106,8 @@ final seasonEpisodesProvider =
       try {
         final data = await apiService.getSeasonEpisodes(seasonId);
         return (data as Iterable)
-            .map(
-              (item) =>
-                  SeriesEpisodeModel.fromJson(item as Map<String, dynamic>),
-            )
+            .whereType<Map>()
+            .map((item) => SeriesEpisodeModel.fromJson(item))
             .toList(growable: false);
       } catch (_) {
         return const [];
@@ -115,11 +119,11 @@ final seriesEpisodeDetailsProvider =
       final apiService = ref.watch(apiServiceProvider);
       try {
         final data = await apiService.getSeriesEpisodeDetails(episodeId);
-        if (data == null) {
+        if (data == null || data is! Map) {
           return null;
         }
 
-        return SeriesEpisodeModel.fromJson(data as Map<String, dynamic>);
+        return SeriesEpisodeModel.fromJson(data);
       } catch (_) {
         return null;
       }
@@ -133,11 +137,11 @@ final seriesProgressProvider =
       final apiService = ref.watch(apiServiceProvider);
       try {
         final data = await apiService.getSeriesProgress(seriesId);
-        if (data == null) {
+        if (data == null || data is! Map) {
           return null;
         }
 
-        return SeriesWatchProgressModel.fromJson(data as Map<String, dynamic>);
+        return SeriesWatchProgressModel.fromJson(data);
       } catch (_) {
         return null;
       }
